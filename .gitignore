@@ -1,0 +1,38 @@
+# Secrets: every env file except the blank example
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*service-account*.json
+*credentials*.json
+
+# Private project notes
+survey_links.md
+
+# Dependencies
+node_modules/
+
+# Build output
+.next/
+out/
+build/
+dist/
+*.tsbuildinfo
+next-env.d.ts
+
+# Tests
+coverage/
+playwright-report/
+test-results/
+
+# Local tooling
+.vercel/
+supabase/.temp/
+supabase/.branches/
+
+# OS and logs
+.DS_Store
+Thumbs.db
+*.log
