@@ -356,6 +356,14 @@ Access is enforced in the database by row-level security, column grants and trig
 - Approval records the exact version, and a new version clears it.
 - Each new version is checked again, so decisions do not carry over and a dismissed finding on unchanged text must be decided again.
 
+## Gap Radar
+
+- Insights is read-only and available to Reviewers and Admins. It uses existing findings and decisions, so it needs no extra tables.
+- A problem is identified by document, rule and quote, using its latest outcome, so reruns and new versions do not inflate the counts.
+- A rule "may be unclear" after at least 3 decisions, if half were dismissed or 2 dismissals said the rule is unclear.
+- This is a signal for a person to review, not a measure of rule quality. Small numbers can mislead.
+- It reads the latest 5,000 rows, which suits the demo. Larger organisations would need aggregation in the database.
+
 ## Authentication
 
 - There is no public registration. Accounts are created by the seed script until invites exist.

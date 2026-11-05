@@ -14,6 +14,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
     { href: "/rulebook", label: "Rulebook" },
     { href: "/ledger", label: "Claim Ledger" },
     { href: "/assets", label: "Assets" },
+    ...(canReadAudit(member.role) ? [{ href: "/insights", label: "Insights" }] : []),
     ...(canReadAudit(member.role) ? [{ href: "/audit", label: "Audit log" }] : []),
     { href: "/trust", label: "AI and data" },
   ];
