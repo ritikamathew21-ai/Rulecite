@@ -23,6 +23,7 @@ const finding = (
   match: Match | null,
   explanation: string,
   suggestion: string,
+  replacement: string | null = null,
 ): FindingDraft => ({
   origin: "rule",
   category: rule.type,
@@ -32,6 +33,7 @@ const finding = (
   end: match?.end ?? null,
   explanation,
   suggestion,
+  replacement,
   citation: citation(rule),
 });
 
@@ -48,7 +50,7 @@ function checkTerminology(rule: ApprovedRule, text: string) {
       if (claimed.some((taken) => overlaps(match, taken))) continue;
       claimed.push(match);
       findings.push(
-        finding(rule, match, `"${match.quote}" is not the approved term.`, `Replace it with "${preferred}".`),
+        finding(rule, match, `"${match.quote}" is not the approved term.`, `Replace it with "${preferred}".`, preferred),
       );
     }
   }

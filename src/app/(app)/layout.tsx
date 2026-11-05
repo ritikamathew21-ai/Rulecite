@@ -10,6 +10,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
   const navItems = [
     { href: "/workspace", label: "Workspace" },
     { href: "/documents", label: "Documents" },
+    ...(canReadAudit(member.role) ? [{ href: "/review", label: "Review queue" }] : []),
     { href: "/rulebook", label: "Rulebook" },
     { href: "/ledger", label: "Claim Ledger" },
     { href: "/assets", label: "Assets" },

@@ -324,6 +324,17 @@ Access is enforced in the database by row-level security, column grants and trig
 - Findings keep their own copy of the rule, so they stay readable if a rule is edited or retired.
 - Until AI checks are approved, every run is `partial` with the reason `ai_not_run`, and the page says so. The page never claims a full review.
 
+## Review workflow
+
+- Every step is a checked database function, so clients have no direct write access to decisions, comments or status.
+- Only the author decides findings. Dismissing needs a reason, stored in `finding_decisions` for Gap Radar.
+- Accepting applies a fix only when the finding has exact replacement text. Otherwise it is an acknowledgement, and the author edits the draft.
+- High severity findings must be decided before submitting. Lower severity findings may stay open.
+- A document cannot change while it is in review.
+- Reviewers and Admins approve or request changes. Nobody can approve their own document, including Admins.
+- Approval records the exact version, and a new version clears it.
+- Each new version is checked again, so decisions do not carry over and a dismissed finding on unchanged text must be decided again.
+
 ## Authentication
 
 - There is no public registration. Accounts are created by the seed script until invites exist.

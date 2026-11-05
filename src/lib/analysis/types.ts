@@ -37,5 +37,7 @@ export type FindingDraft = {
   end: number | null;
   explanation: string;
   suggestion: string;
+  // Exact replacement text, when the fix can be applied without judgement.
+  replacement: string | null;
   citation: Citation;
 };

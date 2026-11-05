@@ -802,6 +802,260 @@ describe("Documents and checks", () => {
   });
 });
 
+describe("Review workflow", () => {
+  const secret = process.env.CHECK_WRITER_SECRET!;
+  const baseFinding = {
+    origin: "rule",
+    category: "terminology",
+    quote: "draft",
+    start_offset: 10,
+    end_offset: 15,
+    rule_id: null,
+    rule_version: 1,
+    explanation: "Fictional explanation.",
+    suggestion: "Fictional suggestion.",
+    replacement: "version",
+    citation: { code: "TST-01" },
+  };
+
+  const newDocument = async (author: Persona, severity = "medium") => {
+    const org = PERSONAS[author].org!;
+    const created = await as[author].rpc("create_document", {
+      p_org_id: orgIds[org],
+      p_title: "Fictional review document",
+      p_source_type: "text",
+      p_text: "Fictional draft text.",
+      p_images: [],
+      p_colours: [],
+      p_synthetic: true,
+    });
+    if (created.error) throw new Error(`Could not create document: ${created.error.code}`);
+    const { document_id: id, version_id: versionId } = created.data;
+    const run = await as[author].rpc("record_check_run", {
+      p_secret: secret,
+      p_version_id: versionId,
+      p_status: "partial",
+      p_failure_reason: "ai_not_run",
+      p_provider: null,
+      p_model: null,
+      p_dropped_count: 0,
+      p_findings: [{ ...baseFinding, severity }],
+    });
+    if (run.error) throw new Error(`Could not record run: ${run.error.code}`);
+    const finding = await service.from("findings").select("id").eq("document_id", id).single();
+    return { id: id as string, versionId: versionId as string, findingId: finding.data!.id as string };
+  };
+
+  const decide = (persona: Persona, findingId: string, action: string, extra = {}) =>
+    as[persona].rpc("decide_finding", {
+      p_finding_id: findingId,
+      p_action: action,
+      p_reason_code: null,
+      p_reason_text: null,
+      p_final_text: null,
+      ...extra,
+    });
+  const submit = (persona: Persona, id: string, number = 1) =>
+    as[persona].rpc("submit_document", { p_document_id: id, p_expected_number: number });
+  const review = (persona: Persona, id: string, decision: string, comment: string | null = null, number = 1) =>
+    as[persona].rpc("review_document", {
+      p_document_id: id,
+      p_expected_number: number,
+      p_decision: decision,
+      p_comment: comment,
+    });
+  const addVersion = (persona: Persona, id: string, number = 1) =>
+    as[persona].rpc("add_document_version", {
+      p_document_id: id,
+      p_expected_number: number,
+      p_text: "Fictional new text.",
+      p_synthetic: true,
+    });
+  const statusOf = async (id: string) => (await service.from("documents").select("*").eq("id", id).single()).data;
+
+  afterAll(async () => {
+    await service.from("documents").delete().in("org_id", [orgIds[ORG_A], orgIds[ORG_B]]);
+  });
+
+  it("lets only the author decide a finding", async () => {
+    const doc = await newDocument("creatorA");
+    for (const persona of ["targetA", "reviewerA", "adminA", "adminB", "outsider"] as const) {
+      expect((await decide(persona, doc.findingId, "accepted")).error?.code).toBe("42501");
+    }
+    expect((await anon.rpc("decide_finding", { p_finding_id: doc.findingId, p_action: "accepted", p_reason_code: null, p_reason_text: null, p_final_text: null })).error?.code).toBe("42501");
+    await succeed(decide("creatorA", doc.findingId, "accepted"));
+    const row = await service.from("findings").select("state").eq("id", doc.findingId).single();
+    expect(row.data?.state).toBe("accepted");
+  });
+
+  it("requires a reason to dismiss, and text for 'other'", async () => {
+    const doc = await newDocument("creatorA");
+    expect((await decide("creatorA", doc.findingId, "dismissed")).error?.code).toBe("22023");
+    expect((await decide("creatorA", doc.findingId, "dismissed", { p_reason_code: "other", p_reason_text: "  " })).error?.code).toBe("22023");
+    expect((await decide("creatorA", doc.findingId, "dismissed", { p_reason_code: "bad" })).error?.code).toBe("23514");
+    await succeed(decide("creatorA", doc.findingId, "dismissed", { p_reason_code: "rule_unclear" }));
+    const { data } = await as.reviewerA.from("finding_decisions").select("action, reason_code, actor_id").eq("finding_id", doc.findingId);
+    expect(data).toEqual([{ action: "dismissed", reason_code: "rule_unclear", actor_id: ids.creatorA }]);
+  });
+
+  it("requires text to edit a fix, and stores it", async () => {
+    const doc = await newDocument("creatorA");
+    expect((await decide("creatorA", doc.findingId, "edited")).error?.code).toBe("22023");
+    await succeed(decide("creatorA", doc.findingId, "edited", { p_final_text: "my wording" }));
+    const row = await service.from("findings").select("state, resolution").eq("id", doc.findingId).single();
+    expect(row.data).toEqual({ state: "edited", resolution: "my wording" });
+  });
+
+  it("blocks submission until high severity findings are decided, and only for the author", async () => {
+    const doc = await newDocument("creatorA", "high");
+    expect((await submit("creatorA", doc.id)).error?.code).toBe("55000");
+    await succeed(decide("creatorA", doc.findingId, "accepted"));
+    for (const persona of ["targetA", "reviewerA", "adminA"] as const) {
+      expect((await submit(persona, doc.id)).error?.code).toBe("42501");
+    }
+    await succeed(submit("creatorA", doc.id));
+    expect((await statusOf(doc.id))?.status).toBe("in_review");
+  });
+
+  it("allows open lower severity findings at submission", async () => {
+    const doc = await newDocument("creatorA", "medium");
+    await succeed(submit("creatorA", doc.id));
+  });
+
+  it("freezes a document while in review", async () => {
+    const doc = await newDocument("creatorA");
+    await succeed(submit("creatorA", doc.id));
+    expect((await decide("creatorA", doc.findingId, "accepted")).error?.code).toBe("55000");
+    expect((await addVersion("creatorA", doc.id)).error?.code).toBe("55000");
+    expect((await submit("creatorA", doc.id)).error?.code).toBe("55000");
+  });
+
+  it("lets only a Reviewer or Admin in the organisation review", async () => {
+    const doc = await newDocument("creatorA");
+    await succeed(submit("creatorA", doc.id));
+    for (const persona of ["creatorA", "targetA", "adminB", "creatorB", "outsider"] as const) {
+      expect((await review(persona, doc.id, "approved")).error?.code).toBe("42501");
+    }
+    expect((await statusOf(doc.id))?.status).toBe("in_review");
+    await succeed(review("reviewerA", doc.id, "approved"));
+    expect(await statusOf(doc.id)).toMatchObject({ status: "approved", approved_by: ids.reviewerA, approved_version_id: doc.versionId });
+  });
+
+  it("stops anyone approving their own document, including Admins and Reviewers", async () => {
+    for (const author of ["adminA", "reviewerA"] as const) {
+      const doc = await newDocument(author);
+      await succeed(submit(author, doc.id));
+      expect((await review(author, doc.id, "approved")).error?.code).toBe("42501");
+      expect((await statusOf(doc.id))?.status).toBe("in_review");
+    }
+  });
+
+  it("cannot approve a draft, or twice, or the wrong version", async () => {
+    const doc = await newDocument("creatorA");
+    expect((await review("reviewerA", doc.id, "approved")).error?.code).toBe("55000");
+    await succeed(submit("creatorA", doc.id));
+    expect((await review("reviewerA", doc.id, "approved", null, 2)).error?.code).toBe("55000");
+    await succeed(review("reviewerA", doc.id, "approved"));
+    expect((await review("adminA", doc.id, "approved")).error?.code).toBe("55000");
+  });
+
+  it("requires a comment to request changes, then reopens the document", async () => {
+    const doc = await newDocument("creatorA");
+    await succeed(submit("creatorA", doc.id));
+    expect((await review("reviewerA", doc.id, "changes_requested", "  ")).error?.code).toBe("22023");
+    expect((await review("reviewerA", doc.id, "made_up")).error?.code).toBe("22023");
+    await succeed(review("reviewerA", doc.id, "changes_requested", "Please reword this."));
+    expect((await statusOf(doc.id))?.status).toBe("changes_requested");
+    const { data } = await as.creatorA.from("comments").select("body").eq("document_id", doc.id);
+    expect(data).toEqual([{ body: "Please reword this." }]);
+    await succeed(decide("creatorA", doc.findingId, "accepted"));
+  });
+
+  it("clears approval when a new version is added", async () => {
+    const doc = await newDocument("creatorA");
+    await succeed(submit("creatorA", doc.id));
+    await succeed(review("reviewerA", doc.id, "approved"));
+    await succeed(addVersion("creatorA", doc.id));
+    expect(await statusOf(doc.id)).toMatchObject({ status: "draft", approved_version_id: null, approved_by: null, approved_at: null });
+  });
+
+  it("binds new versions to the version on screen, for the author only", async () => {
+    const doc = await newDocument("creatorA");
+    expect((await addVersion("creatorA", doc.id, 5)).error?.code).toBe("55000");
+    for (const persona of ["targetA", "reviewerA", "adminA", "outsider"] as const) {
+      expect((await addVersion(persona, doc.id)).error?.code).toBe("42501");
+    }
+    await succeed(addVersion("creatorA", doc.id));
+    expect((await addVersion("creatorA", doc.id)).error?.code).toBe("55000");
+    const { data } = await service.from("document_versions").select("number, plain_text").eq("document_id", doc.id).order("number");
+    expect(data).toEqual([
+      { number: 1, plain_text: "Fictional draft text." },
+      { number: 2, plain_text: "Fictional new text." },
+    ]);
+  });
+
+  it("requires a check on the new version before submission", async () => {
+    const doc = await newDocument("creatorA");
+    await succeed(addVersion("creatorA", doc.id));
+    expect((await submit("creatorA", doc.id, 2)).error?.code).toBe("55000");
+  });
+
+  it("rejects decisions on findings from an older version", async () => {
+    const doc = await newDocument("creatorA");
+    await succeed(addVersion("creatorA", doc.id));
+    expect((await decide("creatorA", doc.findingId, "accepted")).error?.code).toBe("55000");
+  });
+
+  it("lets readers comment, records the name, and blocks everyone else", async () => {
+    const doc = await newDocument("creatorA");
+    const comment = (persona: Persona) => as[persona].rpc("add_comment", { p_document_id: doc.id, p_body: "A comment." });
+    await succeed(comment("creatorA"));
+    await succeed(comment("reviewerA"));
+    for (const persona of ["targetA", "adminB", "outsider"] as const) {
+      expect((await comment(persona)).error?.code).toBe("42501");
+    }
+    expect((await as.creatorA.rpc("add_comment", { p_document_id: doc.id, p_body: "   " })).error?.code).toBe("23514");
+    const { data } = await as.reviewerA.from("comments").select("author_id, author_name").eq("document_id", doc.id);
+    expect(data?.length).toBe(2);
+    expect(data?.every(({ author_name }) => author_name.length > 0)).toBe(true);
+  });
+
+  it("hides decisions and comments from other users", async () => {
+    const doc = await newDocument("creatorA");
+    await succeed(decide("creatorA", doc.findingId, "accepted"));
+    await succeed(as.creatorA.rpc("add_comment", { p_document_id: doc.id, p_body: "Private." }));
+    for (const persona of ["targetA", "adminB", "outsider"] as const) {
+      expect((await as[persona].from("finding_decisions").select("id").eq("document_id", doc.id)).data).toEqual([]);
+      expect((await as[persona].from("comments").select("id").eq("document_id", doc.id)).data).toEqual([]);
+    }
+    expect((await anon.from("comments").select("id")).error?.code).toBe("42501");
+  });
+
+  it("gives clients no direct write access", async () => {
+    const doc = await newDocument("creatorA");
+    const attempts = [
+      as.adminA.from("comments").insert({ document_id: doc.id, version_id: doc.versionId, org_id: orgIds[ORG_A], author_id: ids.adminA, author_name: "Forged", body: "x" }),
+      as.adminA.from("comments").delete().eq("document_id", doc.id),
+      as.adminA.from("finding_decisions").insert({ finding_id: doc.findingId, document_id: doc.id, org_id: orgIds[ORG_A], actor_id: ids.adminA, action: "accepted" }),
+      as.adminA.from("finding_decisions").delete().eq("document_id", doc.id),
+      as.adminA.from("documents").update({ status: "approved" }).eq("id", doc.id),
+    ];
+    for (const attempt of attempts) expect((await attempt).error?.code).toBe("42501");
+  });
+
+  it("audits every step with the real actor", async () => {
+    const doc = await newDocument("creatorA");
+    await succeed(decide("creatorA", doc.findingId, "dismissed", { p_reason_code: "false_positive" }));
+    await succeed(submit("creatorA", doc.id));
+    await succeed(review("reviewerA", doc.id, "approved"));
+    const { data } = await as.reviewerA.from("audit_log").select("action, actor_id").eq("entity_id", doc.id);
+    expect(data).toContainEqual({ action: "document.submitted", actor_id: ids.creatorA });
+    expect(data).toContainEqual({ action: "document.approved", actor_id: ids.reviewerA });
+    const decision = await as.reviewerA.from("audit_log").select("action, metadata").eq("entity_id", doc.findingId).single();
+    expect(decision.data).toMatchObject({ action: "finding.dismissed", metadata: { reason_code: "false_positive", rule_code: "TST-01" } });
+  });
+});
+
 describe("private helpers", () => {
   it("are not reachable through the API", async () => {
     const args = { target_org: orgIds[ORG_B] };

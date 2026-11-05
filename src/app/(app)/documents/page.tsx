@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requireMember } from "@/lib/auth/member";
+import { DOCUMENT_STATUS_LABELS, type DocumentStatus } from "@/lib/documents/labels";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Documents" };
@@ -17,10 +18,11 @@ export default async function DocumentsPage() {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("documents")
-    .select("id, title, created_at")
+    .select("id, title, status, created_at")
     .eq("org_id", member.organization.id)
     .order("created_at", { ascending: false })
-    .limit(100);
+    .limit(100)
+    .returns<{ id: string; title: string; status: DocumentStatus; created_at: string }[]>();
   if (error) throw new Error("Could not load the documents");
 
   return (
@@ -43,6 +45,7 @@ export default async function DocumentsPage() {
             <thead>
               <tr className="border-b-2 border-ink">
                 <th scope="col" className="py-2 pr-4">Title</th>
+                <th scope="col" className="py-2 pr-4">Status</th>
                 <th scope="col" className="py-2">Created</th>
               </tr>
             </thead>
@@ -54,6 +57,7 @@ export default async function DocumentsPage() {
                       {document.title}
                     </Link>
                   </td>
+                  <td className="py-2 pr-4 whitespace-nowrap">{DOCUMENT_STATUS_LABELS[document.status]}</td>
                   <td className="py-2 whitespace-nowrap">{formatTime.format(new Date(document.created_at))}</td>
                 </tr>
               ))}

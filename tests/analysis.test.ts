@@ -4,6 +4,7 @@ import JSZip from "jszip";
 import { describe, expect, it } from "vitest";
 import { contrastRatio } from "@/lib/analysis/contrast";
 import { runDeterministicChecks } from "@/lib/analysis/deterministic";
+import { applyFixes } from "@/lib/documents/apply-fixes";
 import { IntakeError, MAX_UPLOAD_BYTES, parseDocx, parseText, readDocumentXml } from "@/lib/analysis/intake";
 import { countSyllables, findTerm, normaliseText, readingGrade, splitSentences } from "@/lib/analysis/text";
 import type { ApprovedRule, ParsedDocument } from "@/lib/analysis/types";
@@ -83,6 +84,7 @@ describe("runDeterministicChecks", () => {
       severity: "medium",
       quote: "e-wallet",
       suggestion: 'Replace it with "Zentra Wallet".',
+      replacement: "Zentra Wallet",
       citation: { code: "TERM-12", version: 3, source_excerpt: "Fictional excerpt.", source_name: "Fictional guide" },
     });
     expect(text.slice(found.start!, found.end!)).toBe("e-wallet");
@@ -92,9 +94,10 @@ describe("runDeterministicChecks", () => {
     expect(runDeterministicChecks(plain("Open your Zentra Wallet."), [terminology], [])).toEqual([]);
   });
 
-  it("flags every occurrence of a banned phrase", () => {
+  it("flags every occurrence of a banned phrase, with no automatic fix", () => {
     const found = runDeterministicChecks(plain("Risk-free now. Still risk-free."), [banned], []);
     expect(found.map(({ quote }) => quote)).toEqual(["Risk-free", "risk-free"]);
+    expect(found.every(({ replacement }) => replacement === null)).toBe(true);
   });
 
   it("returns nothing for clean text", () => {
@@ -161,6 +164,31 @@ describe("runDeterministicChecks", () => {
     const [found] = runDeterministicChecks(plain("risk-free"), [original], []);
     original.title = "Changed later";
     expect(found.citation.title).toBe("Test rule");
+  });
+});
+
+describe("applyFixes", () => {
+  const text = "Our e-wallet is risk-free.";
+  const walletFix = { start: 4, end: 12, quote: "e-wallet", replacement: "Zentra Wallet" };
+  const riskFix = { start: 16, end: 25, quote: "risk-free", replacement: "low-risk" };
+
+  it("applies several fixes in any order, keeping offsets correct", () => {
+    const expected = { text: "Our Zentra Wallet is low-risk.", applied: 2 };
+    expect(applyFixes(text, [walletFix, riskFix])).toEqual(expected);
+    expect(applyFixes(text, [riskFix, walletFix])).toEqual(expected);
+  });
+
+  it("skips a fix whose quote no longer matches", () => {
+    expect(applyFixes(text, [{ ...walletFix, quote: "wallet" }])).toEqual({ text, applied: 0 });
+  });
+
+  it("skips an overlapping fix", () => {
+    const overlapping = { start: 8, end: 12, quote: "llet", replacement: "X" };
+    expect(applyFixes(text, [walletFix, overlapping]).applied).toBe(1);
+  });
+
+  it("does nothing with no fixes", () => {
+    expect(applyFixes(text, [])).toEqual({ text, applied: 0 });
   });
 });
 

@@ -7,7 +7,7 @@ import { IntakeError, parseDocx, parseText } from "@/lib/analysis/intake";
 import { runChecks } from "@/lib/analysis/run";
 import type { ParsedDocument } from "@/lib/analysis/types";
 import { requireMember } from "@/lib/auth/member";
-import type { VersionRow } from "@/lib/documents/queries";
+import { checkLatestVersion } from "@/lib/documents/check-latest";
 import { createClient } from "@/lib/supabase/server";
 
 export type DocumentFormState = { error: string } | undefined;
@@ -78,21 +78,7 @@ export async function rerunCheck(formData: FormData) {
   const documentId = z.uuid().parse(formData.get("documentId"));
 
   const supabase = await createClient();
-  const { data: version, error } = await supabase
-    .from("document_versions")
-    .select("*")
-    .eq("document_id", documentId)
-    .order("number", { ascending: false })
-    .limit(1)
-    .single<VersionRow>();
-  if (error) throw new Error("Could not load the document");
-
-  let checked = true;
-  try {
-    await runChecks(supabase, version);
-  } catch {
-    checked = false;
-  }
+  const checked = await checkLatestVersion(supabase, documentId);
 
   revalidatePath(`/documents/${documentId}`);
   redirect(`/documents/${documentId}${checked ? "" : "?check=failed"}`);

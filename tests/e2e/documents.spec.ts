@@ -25,6 +25,10 @@ async function withTestOrganisation(run: (org: string, creator: Account, otherCr
   const orgId = org.data.id;
   const accounts: Account[] = [];
 
+  // A timed-out test cannot clean up, so clear anything it left before starting.
+  await service.from("documents").delete().eq("org_id", orgId);
+  await service.from("rules").delete().eq("org_id", orgId);
+
   const addAccount = async (role: string) => {
     const email = `rls-test-e2e-${randomUUID()}@example.com`;
     const secret = randomBytes(24).toString("base64url");
@@ -206,6 +210,133 @@ test("invalid submissions keep what was typed and explain why", async ({ page })
     });
     await page.getByRole("button", { name: "Save and check" }).click();
     await expect(page.locator('form [role="alert"]')).toHaveText("Upload a .docx file.");
+  });
+});
+
+test("the full journey from draft to approved version", async ({ page, browser }) => {
+  test.setTimeout(180_000);
+  await withTestOrganisation(async (_org, creator, _other, reviewer) => {
+    await signIn(page, creator.email, creator.secret);
+    await submitText(page, "Fictional campaign", "Try the new e-wallet. It is risk-free.");
+    const address = new URL(page.url()).pathname;
+    const card = (code: string) => page.getByRole("listitem", { name: `Finding ${code}` });
+
+    // High severity findings block submission.
+    await page.getByRole("button", { name: "Submit for review" }).click();
+    await expect(page.locator('main [role="alert"]')).toHaveText("Decide every high severity finding before submitting.");
+
+    // Dismissing needs a reason, and an edit can supply custom wording.
+    await card("TST-1001").getByRole("button", { name: "Accept fix" }).click();
+    await expect(card("TST-1001").getByText("Accepted")).toBeVisible();
+    await card("TST-1002").getByText("Edit fix").click();
+    await card("TST-1002").getByLabel("Replacement text").fill("low-risk");
+    await card("TST-1002").getByRole("button", { name: "Save fix" }).click();
+    await expect(card("TST-1002").getByText("Your fix:")).toBeVisible();
+
+    // Accepted fixes create a new version, which is checked again.
+    await page.getByRole("button", { name: "Apply fixes as a new version" }).click();
+    await expect(page.getByText("showing version 2")).toBeVisible();
+    await expect(page.getByText("Try the new Example Wallet. It is low-risk.")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Findings (0)" })).toBeVisible();
+
+    // The original version is kept.
+    await page.getByRole("link", { name: "Version 1", exact: true }).click();
+    await expect(page.getByText("showing version 1 (an older version)")).toBeVisible();
+    await expect(page.locator("mark")).toHaveText(["e-wallet", "risk-free"]);
+    await expect(page.getByRole("button", { name: "Submit for review" })).toHaveCount(0);
+    await page.goto(address);
+
+    await page.getByRole("button", { name: "Submit for review" }).click();
+    await expect(page.getByText("In review", { exact: true })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Edit draft" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /^Approve/ })).toHaveCount(0);
+
+    // A Reviewer requests changes.
+    const reviewerContext = await browser.newContext();
+    const reviewerPage = await reviewerContext.newPage();
+    await signIn(reviewerPage, reviewer.email, reviewer.secret);
+    await reviewerPage.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Review queue" }).click();
+    await reviewerPage.getByRole("link", { name: "Fictional campaign" }).click();
+    await reviewerPage.getByRole("button", { name: "Request changes" }).click();
+    await expect(reviewerPage.locator('main [role="alert"]')).toHaveText("Add a comment explaining what needs to change.");
+    await reviewerPage.getByLabel("Review comment").fill("Please add the fee link.");
+    await reviewerPage.getByRole("button", { name: "Request changes" }).click();
+    await expect(reviewerPage.getByText("Changes requested", { exact: true })).toBeVisible();
+
+    // The Creator revises the draft and resubmits.
+    await page.reload();
+    await expect(page.getByText("Please add the fee link.")).toBeVisible();
+    await page.getByRole("link", { name: "Edit draft" }).click();
+    await page.getByLabel("Draft text").fill("Try the new Example Wallet. See our fee schedule.");
+    await page.getByRole("button", { name: "Save and check new version" }).click();
+    await expect(page.getByText("showing version 3")).toBeVisible();
+    await page.getByRole("button", { name: "Submit for review" }).click();
+    await expect(page.getByText("In review", { exact: true })).toBeVisible();
+
+    // The Reviewer approves that exact version.
+    await reviewerPage.reload();
+    await reviewerPage.getByRole("button", { name: "Approve version 3" }).click();
+    await expect(reviewerPage.getByText(/^Version 3 approved/)).toBeVisible();
+
+    await page.reload();
+    await expect(page.getByText(/^Version 3 approved/)).toBeVisible();
+    await expect(page.getByText("Version 3, saved", { exact: false })).toContainText("(approved)");
+
+    // Editing clears the approval.
+    await page.getByRole("link", { name: "Edit draft" }).click();
+    await expect(page.getByText("The current approval will no longer apply.")).toBeVisible();
+    await page.getByLabel("Draft text").fill("Changed after approval.");
+    await page.getByRole("button", { name: "Save and check new version" }).click();
+    await expect(page.getByText("showing version 4")).toBeVisible();
+    await expect(page.getByText(/^Version 3 approved/)).toHaveCount(0);
+
+    await reviewerPage.goto("/audit");
+    await expect(reviewerPage.getByRole("cell", { name: "document.approved" }).first()).toBeVisible();
+    await expect(reviewerPage.getByRole("cell", { name: "finding.edited" }).first()).toBeVisible();
+    await reviewerContext.close();
+  });
+});
+
+test("dismissing a finding records a reason, and the page stays accessible", async ({ page }) => {
+  await withTestOrganisation(async (_org, creator) => {
+    await signIn(page, creator.email, creator.secret);
+    await submitText(page, "Fictional offer", "It is risk-free.");
+    const finding = page.getByRole("listitem", { name: "Finding TST-1002" });
+    await finding.getByText("Dismiss", { exact: true }).click();
+    const { violations } = await new AxeBuilder({ page }).analyze();
+    expect(violations.map(({ id, nodes }) => `${id}: ${nodes.length}`)).toEqual([]);
+
+    await finding.getByLabel("Reason").selectOption("other");
+    await finding.getByRole("button", { name: "Dismiss finding" }).click();
+    await expect(page.locator('main [role="alert"]')).toHaveText("Choose a reason, and add details if you choose Other.");
+
+    await finding.getByText("Dismiss", { exact: true }).click();
+    await finding.getByLabel("Reason").selectOption("rule_unclear");
+    await finding.getByRole("button", { name: "Dismiss finding" }).click();
+    await expect(finding.getByText("Dismissed")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Run check again" })).toHaveCount(0);
+
+    await page.getByRole("button", { name: "Submit for review" }).click();
+    await expect(page.getByText("In review", { exact: true })).toBeVisible();
+  });
+});
+
+test("a Reviewer does not see review controls on their own document", async ({ page }) => {
+  await withTestOrganisation(async (_org, _creator, _other, reviewer) => {
+    await signIn(page, reviewer.email, reviewer.secret);
+    await submitText(page, "Reviewer's own draft", "A clean sentence.");
+    await page.getByRole("button", { name: "Submit for review" }).click();
+    await expect(page.getByText("Someone else must review this document, because you wrote it.")).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Approve/ })).toHaveCount(0);
+  });
+});
+
+test("Creators have no review queue", async ({ page }) => {
+  await withTestOrganisation(async (_org, creator) => {
+    await signIn(page, creator.email, creator.secret);
+    await expect(page.getByRole("link", { name: "Review queue" })).toHaveCount(0);
+    await page.goto("/review");
+    await expect(page).toHaveURL(/\/documents$/);
   });
 });
 
