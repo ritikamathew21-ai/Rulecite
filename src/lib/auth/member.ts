@@ -1,4 +1,5 @@
 import "server-only";
+import { isAuthRetryableFetchError } from "@supabase/supabase-js";
 import { redirect } from "next/navigation";
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
@@ -30,7 +31,8 @@ type MembershipRow = {
 // getClaims verifies the token signature. The role comes from the database under RLS.
 const getSession = cache(async () => {
   const supabase = await createClient();
-  const { data } = await supabase.auth.getClaims();
+  const { data, error: claimsError } = await supabase.auth.getClaims();
+  if (isAuthRetryableFetchError(claimsError)) throw new Error("Could not verify session");
   const claims = data?.claims;
   if (!claims) return null;
 

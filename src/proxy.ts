@@ -1,4 +1,5 @@
 import { createServerClient } from "@supabase/ssr";
+import { isAuthRetryableFetchError } from "@supabase/supabase-js";
 import { NextResponse, type NextRequest } from "next/server";
 import { DEFAULT_PATH } from "@/lib/auth/redirects";
 import { getPublicEnv } from "@/lib/env";
@@ -24,7 +25,10 @@ export async function proxy(request: NextRequest) {
     },
   });
 
-  const { data } = await supabase.auth.getClaims();
+  const { data, error } = await supabase.auth.getClaims();
+  // An outage is not a sign-out. requireMember fails closed on the page instead.
+  if (isAuthRetryableFetchError(error)) return response;
+
   const signedIn = Boolean(data?.claims);
   const { pathname, search } = request.nextUrl;
   const isPublic = PUBLIC_PATHS.includes(pathname);
@@ -50,5 +54,5 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|api/health$).*)"],
 };

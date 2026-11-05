@@ -18,7 +18,11 @@ async function signIn(page: Page, email: string, secret = password) {
   await page.waitForURL(/\/workspace$/);
 }
 
+// Pages stream in, so wait for the real page before measuring it.
+const pageLoaded = (page: Page) => expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+
 const expectNoAccessibilityIssues = async (page: Page) => {
+  await pageLoaded(page);
   const { violations } = await new AxeBuilder({ page }).analyze();
   expect(violations.map(({ id, nodes }) => `${id}: ${nodes.length}`)).toEqual([]);
 };
@@ -117,6 +121,7 @@ test("the layout has no sideways scroll on a phone", async ({ page }) => {
   await signIn(page, accounts.reviewer);
   for (const path of ["/workspace", "/audit", "/trust"]) {
     await page.goto(path);
+    await pageLoaded(page);
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     expect(overflow).toBeLessThanOrEqual(0);
   }

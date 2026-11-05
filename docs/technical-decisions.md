@@ -294,11 +294,26 @@ Access is enforced in the database by row-level security, column grants and trig
 - `src/proxy.ts` refreshes the session and redirects early. It is not the security boundary.
 - `requireMember()` verifies the token signature with `getClaims()` and reads the role from the database under row-level security.
 - Every protected page and server action must call `requireMember()`.
+- A failed token check caused by a network or Supabase error is not treated as signed out. The proxy lets the request through, and `requireMember()` throws, so the user sees the error page with no access. Invalid or missing tokens still go to sign-in.
 - `safeNextPath()` keeps post-login redirects on this site.
 - Sign-in failures show one generic message, so the form does not reveal which emails exist.
 - Sign-out uses local scope, because demo accounts may be shared.
 - `npm run test:e2e` tests these journeys in a real browser against the production build.
 - The session cookie is `HttpOnly`, `Secure` in production and `SameSite=Lax`, because page scripts never need the token. The browser Supabase client therefore has no session and acts as an anonymous visitor. Features that need signed-in data use the server.
+
+## Health endpoint
+
+- `GET /api/health` is public and returns only `ok` or `unavailable`, with HTTP 200 or 503. It is never cached.
+- It calls `public.health_check()`, which reads no tables, using the publishable key.
+- It skips the proxy, so it does not depend on sessions.
+
+## Known test issues
+
+- "a session keeps working across pages" failed once on 2026-11-05. The error was not captured, and the failure did not reproduce in 216 test executions across 8 evidence runs.
+- The most likely cause is a response slower than the 5-second assertion on the first visit to `/audit`, but this is unproven.
+- The investigation ruled out the proxy change and shared test state, and found token expiry very unlikely.
+- Retries are deliberately not enabled. Failed tests now keep a trace and screenshot, so a recurrence can be diagnosed. Traces can contain the demo password, so they must not be shared.
+- Fault injection was a one-off check. Slow-page behaviour and outage recovery have no permanent browser test. Unit tests cover how outages are classified.
 
 ## Interface
 
@@ -306,6 +321,8 @@ Access is enforced in the database by row-level security, column grants and trig
 - Navigation shows only pages that work. Features appear when they are built.
 - Fonts are self-hosted at build time, so visitors make no requests to Google.
 - Automated axe checks run on every page. They do not replace manual accessibility testing.
+- Pages show a loading message while slow data streams in. It does not appear until the server starts responding, because the shared layout reads the session.
+- The error page's retry refetches from the server, so it recovers once a service returns.
 
 ## Schema changes from the plan
 

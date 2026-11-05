@@ -7,7 +7,13 @@ export default defineConfig({
   testDir: "tests/e2e",
   workers: 1,
   reporter: "line",
-  use: { baseURL: `http://localhost:${port}`, ...devices["Desktop Chrome"] },
+  // Traces can contain typed passwords. They stay in the Git-ignored test-results folder.
+  use: {
+    baseURL: `http://localhost:${port}`,
+    ...devices["Desktop Chrome"],
+    trace: "retain-on-failure",
+    screenshot: "only-on-failure",
+  },
   webServer: {
     command: `npm run start -- -p ${port}`,
     port,
