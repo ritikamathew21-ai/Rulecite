@@ -5,9 +5,10 @@ import { describe, expect, it } from "vitest";
 import { contrastRatio } from "@/lib/analysis/contrast";
 import { runDeterministicChecks } from "@/lib/analysis/deterministic";
 import { applyFixes } from "@/lib/documents/apply-fixes";
-import { IntakeError, MAX_UPLOAD_BYTES, parseDocx, parseText, readDocumentXml } from "@/lib/analysis/intake";
+import { IntakeError, MAX_UPLOAD_BYTES, parseDocx, parsePdf, parseText, readDocumentXml } from "@/lib/analysis/intake";
 import { countSyllables, findTerm, normaliseText, readingGrade, splitSentences } from "@/lib/analysis/text";
 import type { ApprovedRule, ParsedDocument } from "@/lib/analysis/types";
+import { buildPdf } from "./fixtures/pdf";
 
 const rule = (overrides: Partial<ApprovedRule>): ApprovedRule => ({
   id: "rule-id",
@@ -281,6 +282,49 @@ describe("parseDocx", () => {
     const file = await zip.generateAsync({ type: "arraybuffer", compression: "DEFLATE" });
     expect(file.byteLength).toBeLessThan(MAX_UPLOAD_BYTES);
     await expect(parseDocx(file)).rejects.toThrow("too large to read");
+  });
+});
+
+const pdfBytes = (pages: string[][]) => {
+  const buffer = buildPdf(pages);
+  return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer;
+};
+
+describe("parsePdf", () => {
+  it("reads text from a real PDF, across pages", async () => {
+    const parsed = await parsePdf(pdfBytes([["Try the new e-wallet."], ["It is risk-free."]]));
+    expect(parsed.text).toContain("Try the new e-wallet.");
+    expect(parsed.text).toContain("It is risk-free.");
+    expect(parsed.images).toEqual([]);
+    expect(parsed.colours).toEqual([]);
+  });
+
+  it("feeds the same checks as other formats", async () => {
+    const parsed = await parsePdf(pdfBytes([["Try the new e-wallet."]]));
+    const [found] = runDeterministicChecks(parsed, [terminology], []);
+    expect(parsed.text.slice(found.start!, found.end!)).toBe("e-wallet");
+  });
+
+  it("rejects a scanned PDF with no text", async () => {
+    await expect(parsePdf(pdfBytes([[]]))).rejects.toThrow("no readable text");
+  });
+
+  it("rejects too many pages", async () => {
+    const pages = Array.from({ length: 101 }, () => ["Page"]);
+    await expect(parsePdf(pdfBytes(pages))).rejects.toThrow("too many pages");
+  });
+
+  it("rejects a file that is not a PDF", async () => {
+    await expect(parsePdf(new TextEncoder().encode("hello world").buffer as ArrayBuffer)).rejects.toThrow("not a PDF");
+  });
+
+  it("rejects a damaged PDF", async () => {
+    await expect(parsePdf(new TextEncoder().encode("%PDF-1.4 damaged").buffer as ArrayBuffer)).rejects.toThrow(IntakeError);
+  });
+
+  it("rejects empty and oversized files", async () => {
+    await expect(parsePdf(new ArrayBuffer(0))).rejects.toThrow("empty");
+    await expect(parsePdf(new ArrayBuffer(MAX_UPLOAD_BYTES + 1))).rejects.toThrow("too large");
   });
 });
 

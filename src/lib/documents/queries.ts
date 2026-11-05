@@ -20,7 +20,7 @@ export type DocumentRow = {
 
 export type VersionRow = CheckableVersion & {
   number: number;
-  source_type: "text" | "docx";
+  source_type: "text" | "docx" | "pdf";
   created_at: string;
 };
 

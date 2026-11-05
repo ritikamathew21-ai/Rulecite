@@ -5,12 +5,25 @@ import { DEMO_ORG_NAME, DEMO_USERS } from "../../scripts/seed-demo.mjs";
 
 const password = process.env.DEMO_USER_PASSWORD!;
 const creator = "zentra-creator@example.com";
+let clickedAt = 0;
 
 async function signIn(page: Page, email: string, secret = password) {
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(secret);
+  clickedAt = Date.now();
   await page.getByRole("button", { name: "Sign in" }).click();
 }
+
+// A one-off sign-in failure left no evidence of its cause, so failures report what the page showed.
+test.afterEach(async ({ page }, testInfo) => {
+  const started = clickedAt;
+  clickedAt = 0;
+  if (!started || testInfo.status === testInfo.expectedStatus) return;
+  const alerts = await page.locator('form [role="alert"]').allTextContents();
+  console.log(
+    `Sign-in diagnostics: ${Date.now() - started}ms after click, at ${new URL(page.url()).pathname}, alerts: ${JSON.stringify(alerts)}`,
+  );
+});
 
 test("signed-out visitors are sent to sign-in, keeping their destination", async ({ page }) => {
   await page.goto("/workspace");

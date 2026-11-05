@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { IntakeError, parseDocx, parseText } from "@/lib/analysis/intake";
+import { IntakeError, parseDocx, parsePdf, parseText } from "@/lib/analysis/intake";
 import { runChecks } from "@/lib/analysis/run";
 import type { ParsedDocument } from "@/lib/analysis/types";
 import { requireMember } from "@/lib/auth/member";
@@ -18,11 +18,13 @@ const titleSchema = z
   .min(1, "Enter a title.")
   .max(200, "The title must be 200 characters or fewer.");
 
-async function readSubmission(formData: FormData): Promise<{ parsed: ParsedDocument; sourceType: "text" | "docx" }> {
+async function readSubmission(formData: FormData): Promise<{ parsed: ParsedDocument; sourceType: "text" | "docx" | "pdf" }> {
   const file = formData.get("file");
   if (file instanceof File && file.size > 0) {
-    if (!file.name.toLowerCase().endsWith(".docx")) throw new IntakeError("Upload a .docx file.");
-    return { parsed: await parseDocx(await file.arrayBuffer()), sourceType: "docx" };
+    const name = file.name.toLowerCase();
+    if (name.endsWith(".docx")) return { parsed: await parseDocx(await file.arrayBuffer()), sourceType: "docx" };
+    if (name.endsWith(".pdf")) return { parsed: await parsePdf(await file.arrayBuffer()), sourceType: "pdf" };
+    throw new IntakeError("Upload a .docx or .pdf file.");
   }
   return { parsed: parseText(String(formData.get("text") ?? "")), sourceType: "text" };
 }

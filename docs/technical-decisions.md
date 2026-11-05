@@ -337,6 +337,7 @@ Access is enforced in the database by row-level security, column grants and trig
 - Uploaded files are parsed in memory and never stored. Only the extracted text, image descriptions and colours are kept.
 - DOCX parsing uses `jszip` rather than `mammoth` from the deck, because `mammoth` discards text colours. It reads the main body only.
 - Uploads are limited to 4 MB, because Vercel rejects request bodies over 4.5 MB.
+- PDF intake uses `unpdf`, with a 100-page limit, and is parsed in memory. It reads text only, so images, alt text and colours in PDFs are not checked, and the document page says so. Scanned PDFs have no text and are rejected with a clear message. OCR is not included.
 - Findings keep their own copy of the rule, so they stay readable if a rule is edited or retired.
 - A run is `complete` only when AI checks finished. Otherwise it is `partial`, the page gives the reason, and it never claims a full review.
 - AI runs only on content confirmed as fictional or synthetic. Otherwise the reason is `ai_not_confirmed`. A missing key or disabled provider gives `ai_not_configured`, and no approved AI rules gives `ai_no_rules`.
@@ -390,6 +391,7 @@ Access is enforced in the database by row-level security, column grants and trig
 - The investigation ruled out the proxy change and shared test state, and found token expiry very unlikely.
 - Retries are deliberately not enabled. Failed tests now keep a trace and screenshot, so a recurrence can be diagnosed. Traces can contain the demo password, so they must not be shared.
 - "does not create a version when only the status changes" failed once on 2026-11-05, then passed 4 of 4 runs. The error was not captured, so the cause is unproven. Possible causes are a duplicate random test ID (about a 1% chance per run), a temporary API error that the test ignored, or a rare real problem. Test IDs now use a sequence, and setup errors and update results now report themselves, so a repeat will show its cause.
+- "creator signs in and sees the role from the database" failed once on 2026-11-05: the page stayed on sign-in past the 5-second assertion. It then passed 6 of 6 cold-start runs, and 49 timed sign-ins (25 direct to Supabase, 24 in a browser) stayed under 3 seconds with no errors. The trace was deleted by mistake, so the cause is unknown. A slow Supabase response is possible but unproven. Failed tests in `auth.spec.ts` now print the elapsed time, the page path and any on-page message.
 - Fault injection was a one-off check. Slow-page behaviour and outage recovery have no permanent browser test. Unit tests cover how outages are classified.
 
 ## Interface

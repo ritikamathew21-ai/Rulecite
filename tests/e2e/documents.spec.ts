@@ -3,6 +3,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import JSZip from "jszip";
+import { buildPdf } from "../fixtures/pdf";
 
 const service = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
   auth: { persistSession: false, autoRefreshToken: false },
@@ -194,7 +195,7 @@ test("a Word document is checked for text, alt text and contrast", async ({ page
     await signIn(page, creator.email, creator.secret);
     await page.goto("/documents/new");
     await page.getByLabel("Title").fill("Fictional brochure");
-    await page.getByLabel("Or upload a Word document").setInputFiles({
+    await page.getByLabel("Or upload a file").setInputFiles({
       name: "brochure.docx",
       mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       buffer,
@@ -209,6 +210,40 @@ test("a Word document is checked for text, alt text and contrast", async ({ page
   });
 });
 
+test("a PDF is checked for text, and says what was not checked", async ({ page }) => {
+  await withTestOrganisation(async (_org, creator) => {
+    await signIn(page, creator.email, creator.secret);
+    await page.goto("/documents/new");
+    await page.getByLabel("Title").fill("Fictional PDF");
+    await page.getByLabel("Or upload a file").setInputFiles({
+      name: "flyer.pdf",
+      mimeType: "application/pdf",
+      buffer: buildPdf([["Try the new e-wallet."], ["It is risk-free."]]),
+    });
+    await page.getByRole("button", { name: "Save and check" }).click();
+    await page.waitForURL(/\/documents\/[0-9a-f-]{36}/);
+
+    await expect(page.getByRole("heading", { name: "Findings (2)" })).toBeVisible();
+    await expect(page.locator("mark")).toHaveText(["e-wallet", "risk-free"]);
+    await expect(page.getByText("This came from a PDF, so only its text was checked.")).toBeVisible();
+  });
+});
+
+test("a scanned PDF gets a clear message", async ({ page }) => {
+  await withTestOrganisation(async (_org, creator) => {
+    await signIn(page, creator.email, creator.secret);
+    await page.goto("/documents/new");
+    await page.getByLabel("Title").fill("Scanned flyer");
+    await page.getByLabel("Or upload a file").setInputFiles({
+      name: "scan.pdf",
+      mimeType: "application/pdf",
+      buffer: buildPdf([[]]),
+    });
+    await page.getByRole("button", { name: "Save and check" }).click();
+    await expect(page.locator('form [role="alert"]')).toHaveText("This PDF has no readable text. It may be a scan.");
+  });
+});
+
 test("invalid submissions keep what was typed and explain why", async ({ page }) => {
   await withTestOrganisation(async (_org, creator) => {
     await signIn(page, creator.email, creator.secret);
@@ -218,13 +253,13 @@ test("invalid submissions keep what was typed and explain why", async ({ page })
     await expect(page.locator('form [role="alert"]')).toHaveText("Enter some text to check.");
     await expect(page.getByLabel("Title")).toHaveValue("Empty draft");
 
-    await page.getByLabel("Or upload a Word document").setInputFiles({
+    await page.getByLabel("Or upload a file").setInputFiles({
       name: "notes.txt",
       mimeType: "text/plain",
       buffer: Buffer.from("not a word document"),
     });
     await page.getByRole("button", { name: "Save and check" }).click();
-    await expect(page.locator('form [role="alert"]')).toHaveText("Upload a .docx file.");
+    await expect(page.locator('form [role="alert"]')).toHaveText("Upload a .docx or .pdf file.");
   });
 });
 

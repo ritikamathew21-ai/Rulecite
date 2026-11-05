@@ -795,6 +795,13 @@ describe("Documents and checks", () => {
     expect((await as.creatorA.rpc("record_check_run", bad)).error?.code).toBe("23514");
   });
 
+  it("accepts the supported sources only", async () => {
+    const pdf = await as.creatorA.rpc("create_document", { ...createArgs(ORG_A), p_source_type: "pdf" });
+    expect(pdf.error).toBeNull();
+    const other = await as.creatorA.rpc("create_document", { ...createArgs(ORG_A), p_source_type: "html" });
+    expect(other.error?.code).toBe("23514");
+  });
+
   it("keeps findings in the document's own organisation", async () => {
     await succeed(as.creatorB.rpc("record_check_run", recordArgs(otherOrg.version_id)));
     const { data } = await as.creatorB.from("findings").select("org_id").eq("document_id", otherOrg.document_id);

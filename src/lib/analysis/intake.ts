@@ -1,10 +1,12 @@
 import JSZip from "jszip";
+import { extractText, getDocumentProxy } from "unpdf";
 import { MAX_TEXT_LENGTH, normaliseText } from "@/lib/analysis/text";
 import type { DocumentImage, ParsedDocument, TextColour } from "@/lib/analysis/types";
 
 // Vercel rejects request bodies over 4.5 MB.
 export const MAX_UPLOAD_BYTES = 4 * 1024 * 1024;
 const MAX_DOCUMENT_XML_BYTES = 20 * 1024 * 1024;
+const MAX_PDF_PAGES = 100;
 
 export class IntakeError extends Error {}
 
@@ -67,9 +69,46 @@ export function readDocumentXml(xml: string): ParsedDocument {
   return { text, images, colours };
 }
 
-export async function parseDocx(file: ArrayBuffer): Promise<ParsedDocument> {
+function checkFileSize(file: ArrayBuffer) {
   if (file.byteLength === 0) throw new IntakeError("This file is empty.");
   if (file.byteLength > MAX_UPLOAD_BYTES) throw new IntakeError("This file is too large. The limit is 4 MB.");
+}
+
+// shortcut: reads text only, so images and colours in a PDF are not checked. Add them with the image checks.
+export async function parsePdf(file: ArrayBuffer): Promise<ParsedDocument> {
+  checkFileSize(file);
+
+  const bytes = new Uint8Array(file);
+  if (new TextDecoder().decode(bytes.slice(0, 5)) !== "%PDF-") throw new IntakeError("This file is not a PDF.");
+
+  let document;
+  try {
+    document = await getDocumentProxy(bytes);
+  } catch (error) {
+    throw new IntakeError(
+      (error as Error).name === "PasswordException"
+        ? "This PDF is password protected. Remove the password and upload it again."
+        : "This PDF could not be read.",
+    );
+  }
+
+  try {
+    if (document.numPages > MAX_PDF_PAGES) throw new IntakeError(`This PDF has too many pages. The limit is ${MAX_PDF_PAGES}.`);
+    const { text: extracted } = await extractText(document, { mergePages: true });
+    const text = normaliseText(extracted);
+    if (!text) throw new IntakeError("This PDF has no readable text. It may be a scan.");
+    if (text.length > MAX_TEXT_LENGTH) throw new IntakeError(TOO_LONG);
+    return { text, images: [], colours: [] };
+  } catch (error) {
+    if (error instanceof IntakeError) throw error;
+    throw new IntakeError("This PDF could not be read.");
+  } finally {
+    await document.loadingTask.destroy();
+  }
+}
+
+export async function parseDocx(file: ArrayBuffer): Promise<ParsedDocument> {
+  checkFileSize(file);
 
   let zip: JSZip;
   try {

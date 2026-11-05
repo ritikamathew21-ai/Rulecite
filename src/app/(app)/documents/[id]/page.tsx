@@ -162,6 +162,12 @@ export default async function DocumentPage({ params, searchParams }: PageProps<"
         </p>
       )}
 
+      {version.source_type === "pdf" && (
+        <p className="mt-4 max-w-prose">
+          This came from a PDF, so only its text was checked. Images, alt text and colours were not reviewed.
+        </p>
+      )}
+
       <h2 className="mt-8 text-xl font-bold">Your draft</h2>
       <div className="mt-2">
         <DraftText text={version.plain_text} findings={findings} />

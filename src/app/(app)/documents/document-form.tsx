@@ -23,11 +23,11 @@ export function DocumentForm() {
       <Field label="Paste your text">
         <textarea name="text" rows={10} className={fieldClass} />
       </Field>
-      <Field label="Or upload a Word document" hint="A .docx file up to 4 MB. If you choose a file, it is used instead of the text above.">
+      <Field label="Or upload a file" hint="A .docx or .pdf file up to 4 MB. If you choose a file, it is used instead of the text above.">
         <input
           name="file"
           type="file"
-          accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+          accept=".docx,.pdf,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
           className={fieldClass}
         />
       </Field>
