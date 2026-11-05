@@ -106,7 +106,7 @@ test("every navigation link leads to a working page", async ({ page }) => {
   await signIn(page, accounts.admin);
   const nav = page.getByRole("navigation", { name: "Main" });
   const hrefs = await nav.getByRole("link").evaluateAll((links) => links.map((link) => link.getAttribute("href")));
-  expect(hrefs).toEqual(["/workspace", "/rulebook", "/ledger", "/assets", "/audit", "/trust"]);
+  expect(hrefs).toEqual(["/workspace", "/documents", "/rulebook", "/ledger", "/assets", "/audit", "/trust"]);
 
   for (const href of hrefs) {
     const response = await page.goto(href!);

@@ -7,7 +7,8 @@ export const RULE_TYPE_LABELS = {
   messaging: "Messaging",
   claim: "Claims",
   readability: "Readability",
-  accessibility: "Accessibility",
+  accessibility: "Alt text",
+  contrast: "Contrast",
   visual: "Visual",
 } as const;
 

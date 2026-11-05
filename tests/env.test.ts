@@ -40,6 +40,12 @@ describe("application source", () => {
     expect(offenders).toEqual([]);
   });
 
+  it("reads the check writer secret in one server-only file", () => {
+    const readers = sourceFiles("src").filter((path) => readFileSync(path, "latin1").includes("CHECK_WRITER_SECRET"));
+    expect(readers.map((path) => path.replaceAll("\\", "/"))).toEqual(["src/lib/analysis/run.ts"]);
+    expect(readFileSync("src/lib/analysis/run.ts", "utf8")).toMatch(/^import "server-only";/);
+  });
+
   it("marks the server client server-only", () => {
     expect(readFileSync("src/lib/supabase/server.ts", "utf8")).toMatch(/^import "server-only";/);
   });

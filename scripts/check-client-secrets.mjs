@@ -2,7 +2,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-export const SECRET_NAMES = ["GEMINI_API_KEY", "SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_DB_PASSWORD", "DEMO_USER_PASSWORD"];
+export const SECRET_NAMES = ["GEMINI_API_KEY", "SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_DB_PASSWORD", "DEMO_USER_PASSWORD", "CHECK_WRITER_SECRET"];
 const BUILD_DIR = ".next/static";
 
 export function readSecrets(envText) {

@@ -2,6 +2,10 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  experimental: {
+    // Vercel rejects request bodies over 4.5 MB.
+    serverActions: { bodySizeLimit: "4.5mb" },
+  },
   turbopack: {
     rules: {
       "*.css": {

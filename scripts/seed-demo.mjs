@@ -35,6 +35,7 @@ export const DEMO_RULES = [
   rule("CLM-02", "claim", "high", "Fee and rate claims must match approved facts", "Any fee, rate or limit must match an approved fact that has not expired.", "section 3.1", "Numbers in our content must match the current approved figures."),
   rule("READ-01", "readability", "medium", "Write for a wide audience", "Aim for a reading grade of 9 or lower.", "section 1.4", "Customer content should be readable at about grade 9."),
   rule("ACC-01", "accessibility", "high", "Describe every image", "Every meaningful image needs alt text.", "section 5.1", "All meaningful images must include alternative text."),
+  rule("ACC-02", "contrast", "high", "Keep text readable", "Text needs a contrast ratio of at least 4.5:1 against its background.", "section 5.2", "Text and background colours must meet WCAG AA contrast."),
   rule("VIS-02", "visual", "medium", "Use brand colours for text", "Text colours must come from the approved palette.", "section 6.2", "Only palette colours may be used for text."),
 ];
 

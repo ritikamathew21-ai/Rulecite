@@ -16,11 +16,13 @@
     "db": "node --env-file=.env.local scripts/supabase-remote.mjs",
     "test:rls": "node --env-file=.env.local node_modules/vitest/vitest.mjs run --config vitest.integration.config.mts",
     "db:seed": "node --env-file=.env.local scripts/seed-demo.mjs",
+    "db:writer": "node --env-file=.env.local scripts/set-check-writer.mjs",
     "test:e2e": "node --env-file=.env.local node_modules/@playwright/test/cli.js test"
   },
   "dependencies": {
     "@supabase/ssr": "0.12.7",
     "@supabase/supabase-js": "2.119.0",
+    "jszip": "^3.10.1",
     "next": "16.4.5",
     "react": "19.3.0",
     "react-dom": "19.3.0",

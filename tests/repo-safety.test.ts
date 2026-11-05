@@ -17,7 +17,7 @@ const isIgnored = (path: string) => {
 
 describe(".env.example", () => {
   it("leaves every secret blank", () => {
-    for (const name of ["GEMINI_API_KEY", "SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_DB_PASSWORD", "DEMO_USER_PASSWORD"]) {
+    for (const name of ["GEMINI_API_KEY", "SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_DB_PASSWORD", "DEMO_USER_PASSWORD", "CHECK_WRITER_SECRET"]) {
       expect(envExample).toMatch(new RegExp(`^${name}=$`, "m"));
     }
   });

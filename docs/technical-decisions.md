@@ -311,6 +311,19 @@ Access is enforced in the database by row-level security, column grants and trig
 - Assets currently cover brand colours only. Logos and image files need Storage, and are planned with the image checks.
 - Colours are immutable. To change one, retire it and add a replacement, so they need no versions.
 
+## Documents and checks
+
+- Clients have no direct write access to documents, versions, check runs or findings.
+- `create_document()` creates a document and its first version together, for members of that organisation only.
+- `record_check_run()` is the only way to save results. It requires `CHECK_WRITER_SECRET`, so a user cannot record a fake clean run through the API. Only its hash is stored, in the unexposed `private` schema.
+- This secret is the one exception to keeping privileged credentials out of the running app. The project owner chose it over the service key, because a leak could only fake check results, not read or change other data.
+- Authors, Reviewers and Admins can read a document and its results. Other Creators cannot.
+- Uploaded files are parsed in memory and never stored. Only the extracted text, image descriptions and colours are kept.
+- DOCX parsing uses `jszip` rather than `mammoth` from the deck, because `mammoth` discards text colours. It reads the main body only.
+- Uploads are limited to 4 MB, because Vercel rejects request bodies over 4.5 MB.
+- Findings keep their own copy of the rule, so they stay readable if a rule is edited or retired.
+- Until AI checks are approved, every run is `partial` with the reason `ai_not_run`, and the page says so. The page never claims a full review.
+
 ## Authentication
 
 - There is no public registration. Accounts are created by the seed script until invites exist.

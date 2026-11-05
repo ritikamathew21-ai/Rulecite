@@ -658,6 +658,150 @@ describe("Assets", () => {
   });
 });
 
+describe("Documents and checks", () => {
+  const secret = process.env.CHECK_WRITER_SECRET!;
+  const createArgs = (org: string) => ({
+    p_org_id: orgIds[org],
+    p_title: "Fictional launch email",
+    p_source_type: "text",
+    p_text: "Fictional draft text.",
+    p_images: [],
+    p_colours: [],
+    p_synthetic: true,
+  });
+  const finding = {
+    origin: "rule",
+    category: "terminology",
+    severity: "medium",
+    quote: "draft",
+    start_offset: 10,
+    end_offset: 15,
+    rule_id: null,
+    rule_version: 1,
+    explanation: "Fictional explanation.",
+    suggestion: "Fictional suggestion.",
+    citation: { code: "TST-01" },
+  };
+  const recordArgs = (versionId: string, overrides = {}) => ({
+    p_secret: secret,
+    p_version_id: versionId,
+    p_status: "partial",
+    p_failure_reason: "ai_not_run",
+    p_provider: null,
+    p_model: null,
+    p_dropped_count: 0,
+    p_findings: [finding],
+    ...overrides,
+  });
+
+  let created: { document_id: string; version_id: string };
+  let otherOrg: { document_id: string; version_id: string };
+
+  beforeAll(async () => {
+    const own = await as.creatorA.rpc("create_document", createArgs(ORG_A));
+    const other = await as.creatorB.rpc("create_document", createArgs(ORG_B));
+    if (own.error || other.error) throw new Error(`Could not create documents: ${own.error?.code ?? other.error?.code}`);
+    created = own.data;
+    otherOrg = other.data;
+    const recorded = await as.creatorA.rpc("record_check_run", recordArgs(created.version_id));
+    if (recorded.error) throw new Error(`Could not record run: ${recorded.error.code}`);
+  });
+
+  afterAll(async () => {
+    await service.from("documents").delete().in("org_id", [orgIds[ORG_A], orgIds[ORG_B]]);
+  });
+
+  it("records the author, version and synthetic confirmation", async () => {
+    const document = await service.from("documents").select("*").eq("id", created.document_id).single();
+    const version = await service.from("document_versions").select("*").eq("id", created.version_id).single();
+    expect(document.data).toMatchObject({ created_by: ids.creatorA, status: "draft" });
+    expect(version.data).toMatchObject({ number: 1, created_by: ids.creatorA, synthetic_confirmed_by: ids.creatorA });
+    expect(version.data?.synthetic_confirmed_at).not.toBeNull();
+  });
+
+  it("leaves the confirmation empty when it was not given", async () => {
+    const { data } = await as.creatorA.rpc("create_document", { ...createArgs(ORG_A), p_synthetic: false });
+    const version = await service.from("document_versions").select("*").eq("id", data.version_id).single();
+    expect(version.data).toMatchObject({ synthetic_confirmed_by: null, synthetic_confirmed_at: null });
+  });
+
+  it("is closed to anonymous visitors", async () => {
+    for (const table of ["documents", "document_versions", "check_runs", "findings"]) {
+      expect((await anon.from(table).select("*")).error?.code).toBe("42501");
+    }
+    expect((await anon.rpc("create_document", createArgs(ORG_A))).error?.code).toBe("42501");
+    expect((await anon.rpc("record_check_run", recordArgs(created.version_id))).error?.code).toBe("42501");
+  });
+
+  it("stops anyone creating documents outside their organisation", async () => {
+    expect((await as.creatorA.rpc("create_document", createArgs(ORG_B))).error?.code).toBe("42501");
+    expect((await as.outsider.rpc("create_document", createArgs(ORG_A))).error?.code).toBe("42501");
+  });
+
+  it("shows a document to its author, Reviewers and Admins only", async () => {
+    for (const table of ["documents", "document_versions", "check_runs", "findings"]) {
+      const column = table === "documents" ? "id" : "document_id";
+      const read = (persona: Persona) => as[persona].from(table).select(column).eq(column, created.document_id);
+      expect((await read("creatorA")).data?.length).toBe(1);
+      expect((await read("reviewerA")).data?.length).toBe(1);
+      expect((await read("adminA")).data?.length).toBe(1);
+      expect((await read("targetA")).data).toEqual([]);
+      expect((await read("adminB")).data).toEqual([]);
+      expect((await read("outsider")).data).toEqual([]);
+    }
+  });
+
+  it("gives clients no direct write access", async () => {
+    const attempts = [
+      as.adminA.from("documents").insert({ org_id: orgIds[ORG_A], title: "X", created_by: ids.adminA }),
+      as.adminA.from("documents").update({ status: "approved" }).eq("id", created.document_id),
+      as.adminA.from("documents").delete().eq("id", created.document_id),
+      as.adminA.from("document_versions").update({ plain_text: "Changed" }).eq("id", created.version_id),
+      as.adminA.from("document_versions").delete().eq("id", created.version_id),
+      as.adminA.from("check_runs").insert({ document_id: created.document_id, version_id: created.version_id, org_id: orgIds[ORG_A], status: "complete" }),
+      as.adminA.from("check_runs").update({ status: "complete" }).eq("document_id", created.document_id),
+      as.adminA.from("findings").update({ state: "dismissed" }).eq("document_id", created.document_id),
+      as.adminA.from("findings").delete().eq("document_id", created.document_id),
+    ];
+    for (const attempt of attempts) expect((await attempt).error?.code).toBe("42501");
+  });
+
+  it("stops a user recording a fake clean run", async () => {
+    for (const wrong of ["", "guess", `${secret}x`, null]) {
+      const args = recordArgs(created.version_id, { p_secret: wrong, p_status: "complete", p_findings: [] });
+      expect((await as.creatorA.rpc("record_check_run", args)).error?.code).toBe("42501");
+    }
+    const runs = await service.from("check_runs").select("status").eq("document_id", created.document_id);
+    expect(runs.data).toEqual([{ status: "partial" }]);
+  });
+
+  it("does not expose the writer hash", async () => {
+    const { error } = await as.adminA.schema("private" as "public").from("check_writer").select("*");
+    expect(error).not.toBeNull();
+  });
+
+  it("stores findings with their citation, and audits the run", async () => {
+    const { data } = await as.creatorA.from("findings").select("quote, citation, state, org_id").eq("document_id", created.document_id);
+    expect(data).toEqual([{ quote: "draft", citation: { code: "TST-01" }, state: "open", org_id: orgIds[ORG_A] }]);
+    const audit = await as.reviewerA.from("audit_log").select("action, actor_id").eq("entity_id", created.document_id);
+    expect(audit.data).toContainEqual({ action: "document.created", actor_id: ids.creatorA });
+    expect(audit.data).toContainEqual({ action: "check.partial", actor_id: ids.creatorA });
+  });
+
+  it("rejects an unknown version and a bad status", async () => {
+    const unknown = recordArgs(randomUUID());
+    expect((await as.creatorA.rpc("record_check_run", unknown)).error?.code).toBe("23503");
+    const bad = recordArgs(created.version_id, { p_status: "clean" });
+    expect((await as.creatorA.rpc("record_check_run", bad)).error?.code).toBe("23514");
+  });
+
+  it("keeps findings in the document's own organisation", async () => {
+    await succeed(as.creatorB.rpc("record_check_run", recordArgs(otherOrg.version_id)));
+    const { data } = await as.creatorB.from("findings").select("org_id").eq("document_id", otherOrg.document_id);
+    expect(data).toEqual([{ org_id: orgIds[ORG_B] }]);
+  });
+});
+
 describe("private helpers", () => {
   it("are not reachable through the API", async () => {
     const args = { target_org: orgIds[ORG_B] };
