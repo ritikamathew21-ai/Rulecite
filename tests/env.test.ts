@@ -35,7 +35,7 @@ describe("application source", () => {
 
   it("never references privileged variables", () => {
     const offenders = sourceFiles("src").filter((path) =>
-      /SUPABASE_SERVICE_ROLE_KEY|SUPABASE_DB_PASSWORD|GEMINI_API_KEY|DEMO_USER_PASSWORD/.test(readFileSync(path, "latin1")),
+      /SUPABASE_SERVICE_ROLE_KEY|SUPABASE_DB_PASSWORD|DEMO_USER_PASSWORD/.test(readFileSync(path, "latin1")),
     );
     expect(offenders).toEqual([]);
   });
@@ -44,6 +44,18 @@ describe("application source", () => {
     const readers = sourceFiles("src").filter((path) => readFileSync(path, "latin1").includes("CHECK_WRITER_SECRET"));
     expect(readers.map((path) => path.replaceAll("\\", "/"))).toEqual(["src/lib/analysis/run.ts"]);
     expect(readFileSync("src/lib/analysis/run.ts", "utf8")).toMatch(/^import "server-only";/);
+  });
+
+  it("reads the Gemini key in one server-only file, and imports the SDK in one", () => {
+    const paths = (pattern: string) =>
+      sourceFiles("src")
+        .filter((path) => readFileSync(path, "latin1").includes(pattern))
+        .map((path) => path.replaceAll("\\", "/"));
+    expect(paths("GEMINI_API_KEY")).toEqual(["src/lib/ai/select.ts"]);
+    expect(paths("@google/genai")).toEqual(["src/lib/ai/gemini.ts"]);
+    for (const file of ["src/lib/ai/select.ts", "src/lib/ai/gemini.ts"]) {
+      expect(readFileSync(file, "utf8")).toMatch(/^import "server-only";/);
+    }
   });
 
   it("marks the server client server-only", () => {

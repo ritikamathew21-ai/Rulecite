@@ -120,7 +120,7 @@ test("the demo notice is always visible and AI is described honestly", async ({ 
   await signIn(page, accounts.creator);
   await expect(page.getByText("Fictional demonstration. Use only fictional or synthetic content.")).toBeVisible();
   await page.goto("/trust");
-  await expect(page.getByRole("heading", { name: "AI checks are not active yet" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "How AI checks work" })).toBeVisible();
   await expect(page.getByText("Human reviewers at Google may read it.")).toBeVisible();
   await expect(page.getByText("processed in the United States")).toBeVisible();
 });

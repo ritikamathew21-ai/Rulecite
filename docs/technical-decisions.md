@@ -96,6 +96,22 @@ Limits of this evidence:
 - It is unknown whether HTTP 503 responses count against quota.
 - No HTTP 429 occurred, so 429 handling has not been tested against the real API.
 
+### Approved retest, 2026-11-05 20:21 IST
+
+One structured request per route, using `gemini-3.1-flash-lite` and the same fictional sentence, with SDK retries disabled.
+
+| Route | Result | HTTP calls | Time | Quote returned |
+|---|---|---|---|---|
+| `generateContent` | Passed Zod, quote and rule ID verification | 1 | 1.2s | "lowest fees" |
+| Interactions | Passed Zod, quote and rule ID verification | 1 | 1.2s | "lowest fees in India" |
+
+Totals so far: `generateContent` 2 of 3 requests succeeded, and Interactions 1 of 6.
+
+- The Interactions route retries up to 4 times by default, so the earlier 5 failed calls may have been up to 25 attempts. Retries are turned off with `{ retries: { strategy: "none" } }`, and on `generateContent` with `httpOptions.retryOptions.attempts: 1`.
+- Both routes returned valid output, so the earlier failures fit a temporary demand problem rather than a fault in either route. Two evenings of samples are not enough to call either reliable.
+- The two responses quoted different spans of the same claim, so tests must not expect one exact quote from the model.
+- The project owner approved integration through `generateContent` after this retest.
+
 ### Retest rules
 
 A retest happens only after explicit approval from the project owner.
@@ -322,7 +338,12 @@ Access is enforced in the database by row-level security, column grants and trig
 - DOCX parsing uses `jszip` rather than `mammoth` from the deck, because `mammoth` discards text colours. It reads the main body only.
 - Uploads are limited to 4 MB, because Vercel rejects request bodies over 4.5 MB.
 - Findings keep their own copy of the rule, so they stay readable if a rule is edited or retired.
-- Until AI checks are approved, every run is `partial` with the reason `ai_not_run`, and the page says so. The page never claims a full review.
+- A run is `complete` only when AI checks finished. Otherwise it is `partial`, the page gives the reason, and it never claims a full review.
+- AI runs only on content confirmed as fictional or synthetic. Otherwise the reason is `ai_not_confirmed`. A missing key or disabled provider gives `ai_not_configured`, and no approved AI rules gives `ai_no_rules`.
+- The daily limit is reserved atomically in the database, per organisation, per India date. Reaching it gives `daily_limit`.
+- `GEMINI_API_KEY` is read only in `src/lib/ai/select.ts`, and the SDK is imported only in `src/lib/ai/gemini.ts`.
+- Automated tests never call Gemini. Unit tests use fake providers, and the browser suite runs with `AI_PROVIDER=disabled`.
+- The model never sets severity or claim labels. Severity comes from the rule. Claim labels are decided in code: no match is Unsupported, a contradiction is Contradicted, an expired fact is Outdated, and a supported claim produces no finding.
 
 ## Review workflow
 

@@ -137,6 +137,21 @@ test("a Creator checks text and sees cited findings, with AI clearly skipped", a
   });
 });
 
+test("AI is skipped with a clear reason, whether or not content is confirmed", async ({ page }) => {
+  await withTestOrganisation(async (_org, creator) => {
+    await signIn(page, creator.email, creator.secret);
+    await submitText(page, "Not confirmed", "A sentence.");
+    await expect(page.getByText("This content was not marked as fictional or synthetic, so it was not sent to AI.")).toBeVisible();
+
+    await page.goto("/documents/new");
+    await page.getByLabel("Title").fill("Confirmed");
+    await page.getByLabel("Paste your text").fill("A sentence.");
+    await page.getByLabel("This content is fictional or synthetic", { exact: false }).check();
+    await page.getByRole("button", { name: "Save and check" }).click();
+    await expect(page.getByText("AI checks are not set up.")).toBeVisible();
+  });
+});
+
 test("clean text never claims a full review", async ({ page }) => {
   await withTestOrganisation(async (_org, creator) => {
     await signIn(page, creator.email, creator.secret);

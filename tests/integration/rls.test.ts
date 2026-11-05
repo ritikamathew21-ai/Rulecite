@@ -1056,6 +1056,35 @@ describe("Review workflow", () => {
   });
 });
 
+describe("AI daily limit", () => {
+  const reserve = (key: string | null, org = ORG_B) =>
+    as.creatorB.rpc("reserve_ai_check", { p_secret: key, p_org_id: orgIds[org] });
+  const setLimit = (limit: number) => service.from("organizations").update({ daily_check_limit: limit }).eq("id", orgIds[ORG_B]);
+
+  afterAll(async () => {
+    await setLimit(50);
+  });
+
+  it("needs the writer secret", async () => {
+    for (const key of ["", "guess", null]) expect((await reserve(key)).error?.code).toBe("42501");
+    expect((await anon.rpc("reserve_ai_check", { p_secret: "x", p_org_id: orgIds[ORG_B] })).error?.code).toBe("42501");
+  });
+
+  it("refuses when the limit is reached", async () => {
+    await setLimit(0);
+    expect((await reserve(process.env.CHECK_WRITER_SECRET!)).data).toBe(false);
+  });
+
+  it("allows checks under the limit", async () => {
+    await setLimit(1_000_000);
+    expect((await reserve(process.env.CHECK_WRITER_SECRET!)).data).toBe(true);
+  });
+
+  it("does not expose usage", async () => {
+    expect((await as.adminB.schema("private" as "public").from("ai_usage").select("*")).error).not.toBeNull();
+  });
+});
+
 describe("private helpers", () => {
   it("are not reachable through the API", async () => {
     const args = { target_org: orgIds[ORG_B] };

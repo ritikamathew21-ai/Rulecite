@@ -6,6 +6,8 @@ import { Field, fieldClass } from "../../form-field";
 
 const STATE_LABELS = { open: "", accepted: "Accepted", edited: "Edited", dismissed: "Dismissed" };
 
+const CLAIM_LABELS = { unsupported: "Unsupported claim", contradicted: "Contradicted claim", outdated: "Outdated claim" };
+
 const secondaryButton = "rounded border border-muted px-3 py-1.5 font-bold hover:border-ink";
 
 function Hidden({ documentId, findingId, action }: { documentId: string; findingId: string; action: string }) {
@@ -33,7 +35,8 @@ export function FindingCard({
     <li className="border-l-4 border-marker pl-4" aria-label={`Finding ${citation.code}`}>
       <p className="text-sm font-bold">
         {SEVERITY_LABELS[finding.severity]} severity, {RULE_TYPE_LABELS[finding.category]},{" "}
-        {finding.origin === "rule" ? "rule-based" : "AI-assisted"}
+        {finding.origin === "rule" ? "rule-based" : "AI-assisted, citation verified"}
+        {finding.claim_status && <span className="ml-2">{CLAIM_LABELS[finding.claim_status]}</span>}
         {state !== "open" && <span className="highlighted ml-2 px-1">{STATE_LABELS[state]}</span>}
       </p>
       {finding.quote && <p className="mt-1 font-bold">&ldquo;{finding.quote}&rdquo;</p>}
@@ -54,6 +57,16 @@ export function FindingCard({
         </figcaption>
         <blockquote className="mt-1">{citation.source_excerpt}</blockquote>
         <p className="text-muted">{citation.source_name}</p>
+        {citation.fact && (
+          <div className="mt-2">
+            <p className="font-bold text-pencil">{citation.fact.code}</p>
+            <p>{citation.fact.statement}</p>
+            <p className="text-muted">
+              {citation.fact.source_name}
+              {citation.fact.expires_on && `, expires ${citation.fact.expires_on}`}
+            </p>
+          </div>
+        )}
       </figure>
 
       {canDecide && (

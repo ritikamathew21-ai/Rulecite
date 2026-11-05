@@ -20,6 +20,7 @@
     "test:e2e": "node --env-file=.env.local node_modules/@playwright/test/cli.js test"
   },
   "dependencies": {
+    "@google/genai": "2.32.0",
     "@supabase/ssr": "0.12.7",
     "@supabase/supabase-js": "2.119.0",
     "jszip": "^3.10.1",

@@ -22,14 +22,25 @@ export type ParsedDocument = {
   colours: TextColour[];
 };
 
-// A finding keeps its own copy of the rule, so it stays readable if the rule later changes.
+export type ApprovedFact = {
+  id: string;
+  code: string;
+  statement: string;
+  source_name: string;
+  valid_from: string;
+  expires_on: string | null;
+};
+
+export type ClaimStatus = "unsupported" | "contradicted" | "outdated";
+
+// A finding keeps its own copy of the rule and fact, so it stays readable if they later change.
 export type Citation = Pick<
   ApprovedRule,
   "id" | "code" | "version" | "title" | "instruction" | "source_excerpt" | "source_name"
->;
+> & { fact?: Pick<ApprovedFact, "code" | "statement" | "source_name" | "expires_on"> };
 
 export type FindingDraft = {
-  origin: "rule";
+  origin: "rule" | "ai";
   category: RuleType;
   severity: RuleSeverity;
   quote: string | null;
@@ -39,5 +50,7 @@ export type FindingDraft = {
   suggestion: string;
   // Exact replacement text, when the fix can be applied without judgement.
   replacement: string | null;
+  claimStatus?: ClaimStatus | null;
+  factId?: string | null;
   citation: Citation;
 };

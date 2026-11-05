@@ -29,6 +29,22 @@ const PROBLEMS: Record<string, string> = {
   failed: "That did not work, and nothing was changed. Try again.",
 };
 
+const AI_SKIPPED_REASONS: Record<string, string> = {
+  ai_not_run: "AI checks were not available.",
+  ai_not_confirmed: "This content was not marked as fictional or synthetic, so it was not sent to AI.",
+  ai_not_configured: "AI checks are not set up.",
+  ai_no_rules: "There are no approved tone, messaging or claim rules to check against.",
+  daily_limit: "Your organisation has reached its daily limit for AI checks. Try again tomorrow.",
+  quota_exhausted: "The AI service's free quota has run out. Try again later.",
+  rate_limited: "The AI service is receiving too many requests. Try again shortly.",
+  provider_unavailable: "The AI service is busy or unavailable. Try again shortly.",
+  timeout: "The AI service took too long to respond. Try again shortly.",
+  provider_auth: "The AI service rejected this app's access.",
+  provider_request: "The AI service could not process this request.",
+  provider_blocked: "The AI service declined to review this content.",
+  invalid_output: "The AI service returned an unusable answer, so it was ignored.",
+};
+
 const formatTime = new Intl.DateTimeFormat("en-IN", {
   dateStyle: "medium",
   timeStyle: "short",
@@ -131,10 +147,18 @@ export default async function DocumentPage({ params, searchParams }: PageProps<"
       )}
 
       {!run && <p className="mt-4 max-w-prose font-bold">This version has not been checked.</p>}
-      {run?.failure_reason === "ai_not_run" && (
+      {run?.status === "partial" && (
         <p className="mt-4 max-w-prose">
-          <span className="font-bold">AI checks skipped.</span> Tone, messaging and claims were not reviewed, so this is
-          not a full review.
+          <span className="font-bold">AI checks skipped.</span>{" "}
+          {AI_SKIPPED_REASONS[run.failure_reason ?? ""] ?? "AI checks did not complete."} Tone, messaging and claims were
+          not reviewed, so this is not a full review.
+        </p>
+      )}
+      {run?.status === "complete" && (
+        <p className="mt-4 max-w-prose">
+          Code and AI checks both ran. AI findings are suggestions and can be wrong, so people make the final decision.
+          {run.dropped_count > 0 &&
+            ` ${run.dropped_count} AI ${run.dropped_count === 1 ? "suggestion was" : "suggestions were"} removed because the citation could not be verified.`}
         </p>
       )}
 
@@ -198,7 +222,11 @@ export default async function DocumentPage({ params, searchParams }: PageProps<"
         <>
           <h2 className="mt-8 text-xl font-bold">Findings ({findings.length})</h2>
           {ordered.length === 0 ? (
-            <p className="mt-2 max-w-prose">Code checks found no problems with the approved rules they cover.</p>
+            <p className="mt-2 max-w-prose">
+              {run.status === "complete"
+                ? "No problems were found against your approved rules and facts."
+                : "Code checks found no problems with the approved rules they cover."}
+            </p>
           ) : (
             <ul className="mt-3 max-w-prose space-y-6">
               {ordered.map((finding) => (

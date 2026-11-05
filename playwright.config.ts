@@ -19,5 +19,7 @@ export default defineConfig({
     port,
     reuseExistingServer: false,
     stdout: "ignore",
+    // Browser tests must never spend real AI quota.
+    env: { AI_PROVIDER: "disabled" },
   },
 });

@@ -55,6 +55,7 @@ export async function createDocument(_state: DocumentFormState, formData: FormDa
   if (error) return { error: "The document could not be saved. Try again." };
 
   const { document_id: documentId, version_id: versionId } = data as { document_id: string; version_id: string };
+  const synthetic = formData.get("synthetic") === "on";
 
   // The document stays saved if the check fails, and its page says it was not checked.
   let checked = true;
@@ -65,6 +66,7 @@ export async function createDocument(_state: DocumentFormState, formData: FormDa
       plain_text: parsed.text,
       images: parsed.images,
       colours: parsed.colours,
+      synthetic_confirmed_at: synthetic ? new Date().toISOString() : null,
     });
   } catch {
     checked = false;

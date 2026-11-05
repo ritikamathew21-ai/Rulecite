@@ -2,7 +2,7 @@ import "server-only";
 import { notFound } from "next/navigation";
 import { z } from "zod";
 import type { CheckableVersion } from "@/lib/analysis/run";
-import type { Citation } from "@/lib/analysis/types";
+import type { Citation, ClaimStatus } from "@/lib/analysis/types";
 import type { DocumentStatus } from "@/lib/documents/labels";
 import type { RuleSeverity, RuleType } from "@/lib/rules/schema";
 import { createClient } from "@/lib/supabase/server";
@@ -21,11 +21,16 @@ export type DocumentRow = {
 export type VersionRow = CheckableVersion & {
   number: number;
   source_type: "text" | "docx";
-  synthetic_confirmed_at: string | null;
   created_at: string;
 };
 
-export type RunRow = { id: string; status: string; failure_reason: string | null; created_at: string };
+export type RunRow = {
+  id: string;
+  status: string;
+  failure_reason: string | null;
+  dropped_count: number;
+  created_at: string;
+};
 
 export type FindingState = "open" | "accepted" | "edited" | "dismissed";
 
@@ -42,6 +47,7 @@ export type FindingRow = {
   replacement: string | null;
   resolution: string | null;
   state: FindingState;
+  claim_status: ClaimStatus | null;
   citation: Citation;
 };
 
