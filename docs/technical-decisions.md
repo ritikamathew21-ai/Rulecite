@@ -288,6 +288,17 @@ Access is enforced in the database by row-level security, column grants and trig
 - `npm run test:rls` proves this against the hosted project, using temporary users deleted after each run.
 - Each run adds 2 permanent audit rows to the fictional test organisations, because audit rows cannot be deleted.
 
+## Authentication
+
+- There is no public registration. Accounts are created by the seed script until invites exist.
+- `src/proxy.ts` refreshes the session and redirects early. It is not the security boundary.
+- `requireMember()` verifies the token signature with `getClaims()` and reads the role from the database under row-level security.
+- Every protected page and server action must call `requireMember()`.
+- `safeNextPath()` keeps post-login redirects on this site.
+- Sign-in failures show one generic message, so the form does not reveal which emails exist.
+- Sign-out uses local scope, because demo accounts may be shared.
+- `npm run test:e2e` tests these journeys in a real browser against the production build.
+
 ## Schema changes from the plan
 
 - `check_runs`: add `provider` and `failure_reason`. `status` is `running`, `complete`, `partial` or `failed`.
