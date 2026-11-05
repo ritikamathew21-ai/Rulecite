@@ -1,0 +1,34 @@
+import type { Metadata } from "next";
+import Link from "next/link";
+import { canReadAudit, requireMember, ROLE_LABELS } from "@/lib/auth/member";
+
+export const metadata: Metadata = { title: "Workspace" };
+
+export default async function WorkspacePage() {
+  const member = await requireMember();
+
+  return (
+    <>
+      <h1 className="text-4xl font-bold tracking-tight">Your workspace</h1>
+      <p className="mt-4 max-w-prose">
+        Your role in {member.organization.name} is {ROLE_LABELS[member.role]}. Document checks and the rulebook are not
+        available yet.
+      </p>
+      <h2 className="mt-8 text-xl font-bold">What you can do now</h2>
+      <ul className="mt-2 list-disc space-y-1 pl-5">
+        {canReadAudit(member.role) && (
+          <li>
+            <Link href="/audit" className="text-pencil underline">
+              Read your organisation&apos;s audit log
+            </Link>
+          </li>
+        )}
+        <li>
+          <Link href="/trust" className="text-pencil underline">
+            See how AI and your data will be handled
+          </Link>
+        </li>
+      </ul>
+    </>
+  );
+}

@@ -5,6 +5,15 @@ import { createClient } from "@/lib/supabase/server";
 
 export type Role = "creator" | "reviewer" | "admin";
 
+export const ROLE_LABELS: Record<Role, string> = {
+  creator: "Creator",
+  reviewer: "Reviewer",
+  admin: "Admin",
+};
+
+// For navigation and redirects only. Row-level security is what enforces this.
+export const canReadAudit = (role: Role) => role === "reviewer" || role === "admin";
+
 export type Member = {
   userId: string;
   name: string;

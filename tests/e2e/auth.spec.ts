@@ -42,8 +42,7 @@ for (const { email, role, name } of DEMO_USERS) {
     await page.goto("/login");
     await signIn(page, email);
     await expect(page).toHaveURL(/\/workspace$/);
-    await expect(page.getByRole("heading", { name: DEMO_ORG_NAME })).toBeVisible();
-    await expect(page.getByText("This is a fictional demonstration workspace.")).toBeVisible();
+    await expect(page.getByText(DEMO_ORG_NAME, { exact: true })).toBeVisible();
     const label = role[0].toUpperCase() + role.slice(1);
     await expect(page.getByText(`Signed in as ${name} (${label})`)).toBeVisible();
   });

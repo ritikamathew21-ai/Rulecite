@@ -298,6 +298,14 @@ Access is enforced in the database by row-level security, column grants and trig
 - Sign-in failures show one generic message, so the form does not reveal which emails exist.
 - Sign-out uses local scope, because demo accounts may be shared.
 - `npm run test:e2e` tests these journeys in a real browser against the production build.
+- The session cookie is `HttpOnly`, `Secure` in production and `SameSite=Lax`, because page scripts never need the token. The browser Supabase client therefore has no session and acts as an anonymous visitor. Features that need signed-in data use the server.
+
+## Interface
+
+- Visual language: a blue-pencil margin, cool paper and highlighter yellow, taken from editors marking up copy. Highlighter marks the current page and will mark flagged text in drafts.
+- Navigation shows only pages that work. Features appear when they are built.
+- Fonts are self-hosted at build time, so visitors make no requests to Google.
+- Automated axe checks run on every page. They do not replace manual accessibility testing.
 
 ## Schema changes from the plan
 
