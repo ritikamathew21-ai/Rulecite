@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEMO_ORG_NAME, DEMO_RULES, DEMO_USERS } from "../scripts/seed-demo.mjs";
+import { DEMO_ASSETS, DEMO_FACTS, DEMO_ORG_NAME, DEMO_RULES, DEMO_USERS } from "../scripts/seed-demo.mjs";
 
 describe("demo seed data", () => {
   it("labels the organisation as a fictional demonstration", () => {
@@ -16,6 +16,15 @@ describe("demo seed data", () => {
 
   it("cites a fictional source on every rule", () => {
     expect(DEMO_RULES.every((rule) => rule.source_name.includes("(fictional)"))).toBe(true);
+  });
+
+  it("cites a fictional source on every fact", () => {
+    expect(DEMO_FACTS.every((fact) => fact.source_name.includes("(fictional)"))).toBe(true);
+  });
+
+  it("includes an expired fact and valid hex colours", () => {
+    expect(DEMO_FACTS.some((fact) => fact.expires_on === "2026-06-30")).toBe(true);
+    expect(DEMO_ASSETS.every((asset) => /^#[0-9A-F]{6}$/.test(asset.value))).toBe(true);
   });
 
   it("uses valid, unique rule IDs", () => {

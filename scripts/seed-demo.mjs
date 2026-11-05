@@ -38,6 +38,34 @@ export const DEMO_RULES = [
   rule("VIS-02", "visual", "medium", "Use brand colours for text", "Text colours must come from the approved palette.", "section 6.2", "Only palette colours may be used for text."),
 ];
 
+const fact = (code, statement, sourceName, validFrom, expiresOn = null, status = "approved") => ({
+  code,
+  statement,
+  source_name: `Zentra ${sourceName} (fictional)`,
+  valid_from: validFrom,
+  expires_on: expiresOn,
+  status,
+});
+
+export const DEMO_FACTS = [
+  fact("FACT-01", "Transfers between Zentra Wallet users are free.", "Fee Schedule", "2026-01-01"),
+  fact("FACT-02", "Transfers to a bank account cost ₹5 each.", "Fee Schedule", "2026-01-01"),
+  fact("FACT-03", "New users get 2% back on their first ten payments.", "Offers Register", "2026-01-01", "2026-06-30"),
+  fact("FACT-04", "Zentra Wallet supports UPI payments.", "Product Sheet", "2026-01-01"),
+  fact("FACT-05", "Customer support is open from 9am to 9pm IST every day.", "Support Policy", "2026-01-01"),
+  fact("FACT-06", "Weekend support hours may change during festivals.", "Support Policy", "2026-01-01", null, "draft"),
+];
+
+const colour = (code, name, value, status = "approved") => ({ code, name, value, status });
+
+export const DEMO_ASSETS = [
+  colour("CLR-01", "Zentra Indigo", "#2B2D8C"),
+  colour("CLR-02", "Zentra Teal", "#12A594"),
+  colour("CLR-03", "Zentra Ink", "#1B1F2A"),
+  colour("CLR-04", "White", "#FFFFFF"),
+  colour("CLR-05", "Zentra Coral", "#F2654A", "draft"),
+];
+
 function demoPassword() {
   if (process.env.DEMO_USER_PASSWORD) return process.env.DEMO_USER_PASSWORD;
   const password = randomBytes(24).toString("base64url");
@@ -70,14 +98,14 @@ async function upsertUser(client, existingUsers, { email, name }, password) {
 }
 
 // Signs in as the Demo Admin, so the approval and its audit entry are real.
-async function approveAsDemoAdmin(url, publishableKey, password, orgId, codes) {
+async function approveAsDemoAdmin(url, publishableKey, password, orgId, table, codes) {
   const admin = createClient(url, publishableKey, { auth: { persistSession: false, autoRefreshToken: false } });
   const email = DEMO_USERS.find(({ role }) => role === "admin").email;
   const signedIn = await admin.auth.signInWithPassword({ email, password });
   if (signedIn.error) throw new Error("Could not sign in as the Demo Admin");
 
-  const approved = await admin.from("rules").update({ status: "approved" }).eq("org_id", orgId).in("code", codes).select("code");
-  if (approved.error || approved.data.length !== codes.length) throw new Error("Could not approve demo rules");
+  const approved = await admin.from(table).update({ status: "approved" }).eq("org_id", orgId).in("code", codes).select("code");
+  if (approved.error || approved.data.length !== codes.length) throw new Error(`Could not approve demo ${table}`);
   await admin.auth.signOut({ scope: "local" });
 }
 
@@ -104,31 +132,23 @@ async function seed() {
     if (member.error) throw new Error(`Could not add ${user.email}`);
   }
 
-  // Existing rules are left alone, so a rerun cannot undo an Admin's edits.
-  const added = await client
-    .from("rules")
-    .upsert(
-      DEMO_RULES.map((demoRule) => ({ ...demoRule, status: "draft", org_id: orgId })),
-      { onConflict: "org_id,code", ignoreDuplicates: true },
-    )
-    .select("code");
-  if (added.error) throw new Error("Could not add demo rules");
+  for (const [table, rows] of [["rules", DEMO_RULES], ["facts", DEMO_FACTS], ["assets", DEMO_ASSETS]]) {
+    // Existing rows are left alone, so a rerun cannot undo an Admin's edits.
+    const added = await client
+      .from(table)
+      .upsert(
+        rows.map((row) => ({ ...row, status: "draft", org_id: orgId })),
+        { onConflict: "org_id,code", ignoreDuplicates: true },
+      )
+      .select("code");
+    if (added.error) throw new Error(`Could not add demo ${table}`);
 
-  // Rules approved by an earlier seed have no approver, so they go back through approval.
-  const unattributed = await client
-    .from("rules")
-    .update({ status: "draft" })
-    .eq("org_id", orgId)
-    .eq("status", "approved")
-    .is("approved_by", null)
-    .select("code");
-  if (unattributed.error) throw new Error("Could not reset demo rules");
+    const addedCodes = new Set(added.data.map(({ code }) => code));
+    const toApprove = rows.filter(({ code, status }) => status === "approved" && addedCodes.has(code)).map(({ code }) => code);
+    if (toApprove.length > 0) await approveAsDemoAdmin(url, publishableKey, password, orgId, table, toApprove);
+  }
 
-  const waiting = new Set([...added.data, ...unattributed.data].map(({ code }) => code));
-  const toApprove = DEMO_RULES.filter(({ code, status }) => status === "approved" && waiting.has(code)).map(({ code }) => code);
-  if (toApprove.length > 0) await approveAsDemoAdmin(url, publishableKey, password, orgId, toApprove);
-
-  console.log(`Seeded ${DEMO_ORG_NAME} with ${DEMO_USERS.length} demo accounts and ${DEMO_RULES.length} rules.`);
+  console.log(`Seeded ${DEMO_ORG_NAME} with ${DEMO_USERS.length} demo accounts, ${DEMO_RULES.length} rules, ${DEMO_FACTS.length} facts and ${DEMO_ASSETS.length} colours.`);
 }
 
 if (process.argv[1]?.endsWith("seed-demo.mjs")) {

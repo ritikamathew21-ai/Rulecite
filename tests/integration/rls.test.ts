@@ -29,6 +29,12 @@ const as = {} as Record<Persona, SupabaseClient>;
 const ids = {} as Record<Persona, string>;
 const orgIds = {} as Record<string, string>;
 const auditMarker = `rls-run-${randomUUID()}`;
+// A sequence cannot repeat within a run, unlike separate random codes.
+let nextCode = 1000 + Math.floor(Math.random() * 8000);
+const unique = () => `TST-${nextCode++}`;
+const succeed = async (request: PromiseLike<{ error: unknown }>) => {
+  expect((await request).error).toBeNull();
+};
 
 async function deleteTestUsers() {
   const { data, error } = await service.auth.admin.listUsers({ perPage: 1000 });
@@ -272,7 +278,6 @@ describe("Admin", () => {
 });
 
 describe("Rulebook", () => {
-  const unique = () => `TST-${Math.floor(1000 + Math.random() * 9000)}`;
   const content = {
     type: "messaging",
     severity: "high",
@@ -291,7 +296,7 @@ describe("Rulebook", () => {
       .insert({ ...content, org_id: orgIds[org], code: unique(), status })
       .select("id, code")
       .single();
-    if (error) throw new Error("Could not add test rule");
+    if (error) throw new Error(`Could not add test rule: ${error.code}`);
     return data;
   };
   const rule = async (id: string) => (await service.from("rules").select("*").eq("id", id).single()).data;
@@ -387,14 +392,14 @@ describe("Rulebook", () => {
 
   it("cannot approve and edit in one step", async () => {
     const target = await addRule(ORG_A, "draft");
-    await as.adminA.from("rules").update({ title: "Sneaky edit", status: "approved" }).eq("id", target.id);
+    await succeed(as.adminA.from("rules").update({ title: "Sneaky edit", status: "approved" }).eq("id", target.id));
     expect((await rule(target.id))?.status).toBe("draft");
   });
 
   it("does not create a version when only the status changes", async () => {
     const target = await addRule(ORG_A, "draft");
-    await as.adminA.from("rules").update({ status: "approved" }).eq("id", target.id);
-    await as.adminA.from("rules").update({ status: "retired" }).eq("id", target.id);
+    await succeed(as.adminA.from("rules").update({ status: "approved" }).eq("id", target.id));
+    await succeed(as.adminA.from("rules").update({ status: "retired" }).eq("id", target.id));
     expect(await rule(target.id)).toMatchObject({ status: "retired", version: 1, approved_by: null });
   });
 
@@ -429,7 +434,7 @@ describe("Rulebook", () => {
 
   it("does not apply an approval to a version the Admin did not see", async () => {
     const target = await addRule(ORG_A, "draft");
-    await as.adminA.from("rules").update({ title: "Edited by another Admin" }).eq("id", target.id);
+    await succeed(as.adminA.from("rules").update({ title: "Edited by another Admin" }).eq("id", target.id));
     const stale = await as.adminA
       .from("rules")
       .update({ status: "approved" })
@@ -467,6 +472,189 @@ describe("Rulebook", () => {
     const write = { rule_id: approved.id, version: 99, org_id: orgIds[ORG_A], snapshot: {} };
     expect((await as.adminA.from("rule_revisions").insert(write)).error?.code).toBe("42501");
     expect((await as.adminA.from("rule_revisions").delete().eq("rule_id", approved.id)).error?.code).toBe("42501");
+  });
+});
+
+describe("Claim Ledger", () => {
+  const content = {
+    statement: "Fictional fee is zero.",
+    source_name: "Fictional fee schedule",
+    valid_from: "2026-01-01",
+  };
+  let approved: { id: string; code: string };
+  let draft: { id: string; code: string };
+  let otherOrg: { id: string; code: string };
+
+  const addFact = async (org: string, status: string) => {
+    const { data, error } = await service
+      .from("facts")
+      .insert({ ...content, org_id: orgIds[org], code: unique(), status })
+      .select("id, code")
+      .single();
+    if (error) throw new Error(`Could not add test fact: ${error.code}`);
+    return data;
+  };
+  const fact = async (id: string) => (await service.from("facts").select("*").eq("id", id).single()).data;
+
+  beforeAll(async () => {
+    approved = await addFact(ORG_A, "approved");
+    draft = await addFact(ORG_A, "draft");
+    otherOrg = await addFact(ORG_B, "approved");
+  });
+
+  afterAll(async () => {
+    await service.from("facts").delete().in("org_id", [orgIds[ORG_A], orgIds[ORG_B]]);
+  });
+
+  it("is closed to anonymous visitors", async () => {
+    for (const table of ["facts", "fact_revisions"]) {
+      expect((await anon.from(table).select("*")).error?.code).toBe("42501");
+    }
+  });
+
+  it("shows a Creator approved facts only", async () => {
+    const { data } = await as.creatorA.from("facts").select("id").in("id", [approved.id, draft.id]);
+    expect(data).toEqual([{ id: approved.id }]);
+  });
+
+  it("shows Reviewers drafts, and hides other organisations", async () => {
+    const { data } = await as.reviewerA.from("facts").select("id").in("id", [approved.id, draft.id]);
+    expect(data?.length).toBe(2);
+    expect((await as.adminA.from("facts").select("id").eq("id", otherOrg.id)).data).toEqual([]);
+    expect((await as.outsider.from("facts").select("id")).data).toEqual([]);
+  });
+
+  it("lets only Admins add facts, always as drafts", async () => {
+    const row = { ...content, org_id: orgIds[ORG_A], code: unique() };
+    for (const persona of ["creatorA", "reviewerA", "adminB", "outsider"] as const) {
+      expect((await as[persona].from("facts").insert(row)).error?.code).toBe("42501");
+    }
+    const { data, error } = await as.adminA.from("facts").insert(row).select("status, version, created_by").single();
+    expect(error).toBeNull();
+    expect(data).toEqual({ status: "draft", version: 1, created_by: ids.adminA });
+  });
+
+  it("rejects script links and impossible dates", async () => {
+    const script = { ...content, org_id: orgIds[ORG_A], code: unique(), source_url: "javascript:alert(1)" };
+    expect((await as.adminA.from("facts").insert(script)).error?.code).toBe("23514");
+    const dates = { ...content, org_id: orgIds[ORG_A], code: unique(), expires_on: "2025-01-01" };
+    expect((await as.adminA.from("facts").insert(dates)).error?.code).toBe("23514");
+  });
+
+  it("stops non-Admins changing status", async () => {
+    for (const persona of ["creatorA", "reviewerA", "adminB", "outsider"] as const) {
+      await as[persona].from("facts").update({ status: "approved" }).eq("id", draft.id);
+      await as[persona].from("facts").update({ status: "retired" }).eq("id", approved.id);
+    }
+    expect((await fact(draft.id))?.status).toBe("draft");
+    expect((await fact(approved.id))?.status).toBe("approved");
+  });
+
+  it("records who approved a fact, and audits it", async () => {
+    const target = await addFact(ORG_A, "draft");
+    await succeed(as.adminA.from("facts").update({ status: "approved" }).eq("id", target.id));
+    expect(await fact(target.id)).toMatchObject({ status: "approved", approved_by: ids.adminA });
+    const { data } = await as.reviewerA.from("audit_log").select("action, actor_id").eq("entity_id", target.code);
+    expect(data).toContainEqual({ action: "fact.approved", actor_id: ids.adminA });
+  });
+
+  it("sends an edited approved fact back to draft as a new version", async () => {
+    const target = await addFact(ORG_A, "approved");
+    await succeed(as.adminA.from("facts").update({ expires_on: "2030-01-01", status: "approved" }).eq("id", target.id));
+    expect(await fact(target.id)).toMatchObject({ status: "draft", version: 2, approved_by: null });
+    const { data } = await as.reviewerA.from("fact_revisions").select("version").eq("fact_id", target.id).order("version");
+    expect(data).toEqual([{ version: 1 }, { version: 2 }]);
+  });
+
+  it("makes a retired fact go through draft", async () => {
+    const target = await addFact(ORG_A, "retired");
+    expect((await as.adminA.from("facts").update({ status: "approved" }).eq("id", target.id)).error?.code).toBe("23514");
+    expect((await as.adminA.from("facts").update({ statement: "New" }).eq("id", target.id)).error?.code).toBe("23514");
+    expect((await as.adminA.from("facts").update({ status: "draft" }).eq("id", target.id)).error).toBeNull();
+    expect(await fact(target.id)).toMatchObject({ status: "draft", version: 1 });
+  });
+
+  it("protects identity, version and approval fields, and has no client delete", async () => {
+    for (const change of [{ code: "ZZ-99" }, { org_id: orgIds[ORG_B] }, { version: 9 }, { approved_by: ids.creatorA }]) {
+      expect((await as.adminA.from("facts").update(change).eq("id", draft.id)).error?.code).toBe("42501");
+    }
+    expect((await as.adminA.from("facts").delete().eq("id", draft.id)).error?.code).toBe("42501");
+  });
+
+  it("keeps history from Creators and other organisations, and read-only for everyone", async () => {
+    expect((await as.creatorA.from("fact_revisions").select("fact_id")).data).toEqual([]);
+    expect((await as.adminB.from("fact_revisions").select("fact_id").eq("fact_id", approved.id)).data).toEqual([]);
+    const write = { fact_id: approved.id, version: 99, org_id: orgIds[ORG_A], snapshot: {} };
+    expect((await as.adminA.from("fact_revisions").insert(write)).error?.code).toBe("42501");
+  });
+});
+
+describe("Assets", () => {
+  const addAsset = async (org: string, status: string) => {
+    const { data, error } = await service
+      .from("assets")
+      .insert({ org_id: orgIds[org], code: unique(), name: "Fictional colour", value: "#112233", status })
+      .select("id, code")
+      .single();
+    if (error) throw new Error(`Could not add test asset: ${error.code}`);
+    return data;
+  };
+  const asset = async (id: string) => (await service.from("assets").select("*").eq("id", id).single()).data;
+
+  afterAll(async () => {
+    await service.from("assets").delete().in("org_id", [orgIds[ORG_A], orgIds[ORG_B]]);
+  });
+
+  it("is closed to anonymous visitors", async () => {
+    expect((await anon.from("assets").select("*")).error?.code).toBe("42501");
+  });
+
+  it("shows a Creator approved assets from their organisation only", async () => {
+    const shown = await addAsset(ORG_A, "approved");
+    const hidden = await addAsset(ORG_A, "draft");
+    const other = await addAsset(ORG_B, "approved");
+    const { data } = await as.creatorA.from("assets").select("id").in("id", [shown.id, hidden.id, other.id]);
+    expect(data).toEqual([{ id: shown.id }]);
+    const reviewer = await as.reviewerA.from("assets").select("id").in("id", [shown.id, hidden.id, other.id]);
+    expect(reviewer.data?.length).toBe(2);
+  });
+
+  it("lets only Admins add assets, always as drafts", async () => {
+    const row = { org_id: orgIds[ORG_A], code: unique(), name: "New", value: "#ABCDEF" };
+    for (const persona of ["creatorA", "reviewerA", "adminB"] as const) {
+      expect((await as[persona].from("assets").insert(row)).error?.code).toBe("42501");
+    }
+    const { data } = await as.adminA.from("assets").insert(row).select("status, created_by").single();
+    expect(data).toEqual({ status: "draft", created_by: ids.adminA });
+  });
+
+  it("rejects invalid colours", async () => {
+    const row = { org_id: orgIds[ORG_A], code: unique(), name: "Bad", value: "red" };
+    expect((await as.adminA.from("assets").insert(row)).error?.code).toBe("23514");
+  });
+
+  it("stops non-Admins approving, and records the approver", async () => {
+    const target = await addAsset(ORG_A, "draft");
+    for (const persona of ["creatorA", "reviewerA", "adminB"] as const) {
+      await as[persona].from("assets").update({ status: "approved" }).eq("id", target.id);
+    }
+    expect((await asset(target.id))?.status).toBe("draft");
+    await succeed(as.adminA.from("assets").update({ status: "approved" }).eq("id", target.id));
+    expect(await asset(target.id)).toMatchObject({ status: "approved", approved_by: ids.adminA });
+  });
+
+  it("keeps assets immutable, with no client delete", async () => {
+    const target = await addAsset(ORG_A, "approved");
+    for (const change of [{ value: "#000000" }, { name: "Changed" }, { code: "ZZ-99" }, { approved_by: ids.creatorA }]) {
+      expect((await as.adminA.from("assets").update(change).eq("id", target.id)).error?.code).toBe("42501");
+    }
+    expect((await as.adminA.from("assets").delete().eq("id", target.id)).error?.code).toBe("42501");
+  });
+
+  it("makes a retired asset go through draft", async () => {
+    const target = await addAsset(ORG_A, "retired");
+    expect((await as.adminA.from("assets").update({ status: "approved" }).eq("id", target.id)).error?.code).toBe("23514");
+    expect((await as.adminA.from("assets").update({ status: "draft" }).eq("id", target.id)).error).toBeNull();
   });
 });
 

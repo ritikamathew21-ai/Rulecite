@@ -69,6 +69,13 @@ export async function requireMember() {
   return session.member;
 }
 
+// A convenience check. Row-level security is what enforces this.
+export async function requireAdmin(fallback: string) {
+  const member = await requireMember();
+  if (member.role !== "admin") redirect(fallback);
+  return member;
+}
+
 export async function requireSignedIn() {
   const session = await getSession();
   if (!session) redirect("/login");

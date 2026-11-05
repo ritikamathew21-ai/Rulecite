@@ -3,8 +3,9 @@ import Link from "next/link";
 import { requireMember } from "@/lib/auth/member";
 import { setRuleStatus } from "@/lib/rules/actions";
 import { getRuleOr404 } from "@/lib/rules/queries";
-import { RULE_TYPE_LABELS, SEVERITY_LABELS, STATUS_LABELS, type RuleStatus } from "@/lib/rules/schema";
+import { RULE_TYPE_LABELS, SEVERITY_LABELS, STATUS_LABELS } from "@/lib/rules/schema";
 import { createClient } from "@/lib/supabase/server";
+import { StatusActions } from "../../status-actions";
 
 export const metadata: Metadata = { title: "Rule" };
 
@@ -13,15 +14,6 @@ const formatTime = new Intl.DateTimeFormat("en-IN", {
   timeStyle: "short",
   timeZone: "Asia/Kolkata",
 });
-
-const STATUS_ACTIONS: Record<RuleStatus, { status: RuleStatus; label: string }[]> = {
-  draft: [
-    { status: "approved", label: "Approve rule" },
-    { status: "retired", label: "Retire rule" },
-  ],
-  approved: [{ status: "retired", label: "Retire rule" }],
-  retired: [{ status: "draft", label: "Restore as draft" }],
-};
 
 export default async function RulePage({ params, searchParams }: PageProps<"/rulebook/[id]">) {
   const member = await requireMember();
@@ -102,23 +94,7 @@ export default async function RulePage({ params, searchParams }: PageProps<"/rul
 
       {isAdmin && (
         <div className="mt-8 flex flex-wrap items-center gap-3">
-          {STATUS_ACTIONS[rule.status].map(({ status, label }) => (
-            <form key={status} action={setRuleStatus}>
-              <input type="hidden" name="id" value={rule.id} />
-              <input type="hidden" name="status" value={status} />
-              <input type="hidden" name="version" value={rule.version} />
-              <button
-                type="submit"
-                className={
-                  status === "approved"
-                    ? "rounded bg-pencil px-4 py-2 font-bold text-white hover:bg-ink"
-                    : "rounded border border-muted px-4 py-2 font-bold hover:border-ink"
-                }
-              >
-                {label}
-              </button>
-            </form>
-          ))}
+          <StatusActions action={setRuleStatus} id={rule.id} status={rule.status} noun="rule" version={rule.version} />
           {rule.status !== "retired" && (
             <Link href={`/rulebook/${rule.id}/edit`} className="text-pencil underline">
               Edit rule

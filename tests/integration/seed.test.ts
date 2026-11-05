@@ -51,6 +51,24 @@ describe("Zentra demo", () => {
     expect(audit.data).toContainEqual({ actor_id: userId });
   });
 
+  it("gives a Creator approved facts and colours only", async () => {
+    const { client } = await signIn("zentra-creator@example.com");
+    const facts = await client.from("facts").select("status");
+    const assets = await client.from("assets").select("status");
+    expect(facts.data?.length).toBe(5);
+    expect(assets.data?.length).toBe(4);
+    expect([...facts.data!, ...assets.data!].every(({ status }) => status === "approved")).toBe(true);
+  });
+
+  it("records the Demo Admin as the approver of facts and colours", async () => {
+    const { userId } = await signIn("zentra-admin@example.com");
+    const { client } = await signIn("zentra-reviewer@example.com");
+    for (const table of ["facts", "assets"]) {
+      const { data } = await client.from(table).select("approved_by").eq("status", "approved");
+      expect(data?.every(({ approved_by }) => approved_by === userId)).toBe(true);
+    }
+  });
+
   it("keeps the audit log from the Creator", async () => {
     const { client } = await signIn("zentra-creator@example.com");
     const { data } = await client.from("audit_log").select("id");

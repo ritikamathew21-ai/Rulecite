@@ -294,13 +294,22 @@ Access is enforced in the database by row-level security, column grants and trig
 - Creators see approved rules only. Reviewers and Admins also see drafts, retired rules and version history.
 - Database triggers own the version number, approval details, revisions and audit entries, so clients cannot forge them.
 - Editing a rule's content creates a new version and returns it to draft, even if an approval is requested in the same change. Changing status alone does not create a version.
-- Approving, retiring, restoring and editing apply only to the version the Admin was viewing. If the rule changed, nothing is applied and the Admin is told.
+- Approving, retiring, restoring and editing apply only to the version and status the Admin was viewing. If either changed, nothing is applied and the Admin is told. Colours bind to status only, because their content cannot change. This binding is in the server actions, so a direct API call by an Admin is not covered.
 - A retired rule cannot be edited or approved until it is restored to draft. The database enforces this.
 - Seeded rules are approved by the seed script signing in as the Demo Admin, so the approver and audit entry are real.
 - Rules are retired, not deleted, so past findings can always cite them. Creators cannot read retired rules or old versions, so findings must store their own copy of the cited rule. This is required before findings ship.
 - While an edited rule waits for re-approval, it is not approved, so it will not be applied by the check engine.
 - Rule pages stream, so a hidden or missing rule shows the not-found page with HTTP 200. Row-level security keeps its content out of the response. Tests check the content rather than the status code.
 - Channel-specific rules from the Round 1 plan are postponed until documents exist.
+
+## Claim Ledger and Assets
+
+- Facts have a source, a start date and an optional expiry date. They follow the Rulebook's approval, versioning and audit rules.
+- Validity is calculated from today's date in India and never stored as a status. `factValidity()` is the single definition: a fact applies from its start date through its expiry date, inclusive.
+- Only approved facts that are `current` can support a claim. An approved fact that has not started supports nothing, and one that has expired makes the claim Outdated.
+- Source links must start with http:// or https://, enforced in the app and the database.
+- Assets currently cover brand colours only. Logos and image files need Storage, and are planned with the image checks.
+- Colours are immutable. To change one, retire it and add a replacement, so they need no versions.
 
 ## Authentication
 
@@ -327,6 +336,7 @@ Access is enforced in the database by row-level security, column grants and trig
 - The most likely cause is a response slower than the 5-second assertion on the first visit to `/audit`, but this is unproven.
 - The investigation ruled out the proxy change and shared test state, and found token expiry very unlikely.
 - Retries are deliberately not enabled. Failed tests now keep a trace and screenshot, so a recurrence can be diagnosed. Traces can contain the demo password, so they must not be shared.
+- "does not create a version when only the status changes" failed once on 2026-11-05, then passed 4 of 4 runs. The error was not captured, so the cause is unproven. Possible causes are a duplicate random test ID (about a 1% chance per run), a temporary API error that the test ignored, or a rare real problem. Test IDs now use a sequence, and setup errors and update results now report themselves, so a repeat will show its cause.
 - Fault injection was a one-off check. Slow-page behaviour and outage recovery have no permanent browser test. Unit tests cover how outages are classified.
 
 ## Interface

@@ -20,6 +20,16 @@ export default async function WorkspacePage() {
             {member.role === "admin" ? "Manage your brand rules" : "Read your brand rules"}
           </Link>
         </li>
+        <li>
+          <Link href="/ledger" className="text-pencil underline">
+            {member.role === "admin" ? "Manage approved facts" : "Read approved facts"}
+          </Link>
+        </li>
+        <li>
+          <Link href="/assets" className="text-pencil underline">
+            {member.role === "admin" ? "Manage brand colours" : "See brand colours"}
+          </Link>
+        </li>
         {canReadAudit(member.role) && (
           <li>
             <Link href="/audit" className="text-pencil underline">

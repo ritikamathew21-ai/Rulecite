@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { requireMember } from "@/lib/auth/member";
+import { requireAdmin } from "@/lib/auth/member";
 import { parseRule, ruleCodeSchema } from "@/lib/rules/schema";
 import { createClient } from "@/lib/supabase/server";
 
@@ -12,17 +12,10 @@ export type RuleFormState = { error: string } | undefined;
 
 const SAVE_FAILED = "The rule could not be saved. Try again.";
 
-// A convenience check. Row-level security is what enforces this.
-async function requireAdmin() {
-  const member = await requireMember();
-  if (member.role !== "admin") redirect("/rulebook");
-  return member;
-}
-
 const formValues = (formData: FormData) => Object.fromEntries(formData.entries()) as RuleFormValues;
 
 export async function createRule(_state: RuleFormState, formData: FormData): Promise<RuleFormState> {
-  const member = await requireAdmin();
+  const member = await requireAdmin("/rulebook");
   const values = formValues(formData);
 
   const code = ruleCodeSchema.safeParse(values.code);
@@ -49,7 +42,7 @@ export async function updateRule(
   _state: RuleFormState,
   formData: FormData,
 ): Promise<RuleFormState> {
-  await requireAdmin();
+  await requireAdmin("/rulebook");
   const values = formValues(formData);
 
   const rule = parseRule(values);
@@ -73,12 +66,13 @@ export async function updateRule(
 const statusChange = z.object({
   id: z.uuid(),
   status: z.enum(["draft", "approved", "retired"]),
+  expectedStatus: z.enum(["draft", "approved", "retired"]),
   version: z.coerce.number().int().positive(),
 });
 
 export async function setRuleStatus(formData: FormData) {
-  await requireAdmin();
-  const { id, status, version } = statusChange.parse(Object.fromEntries(formData.entries()));
+  await requireAdmin("/rulebook");
+  const { id, status, expectedStatus, version } = statusChange.parse(Object.fromEntries(formData.entries()));
 
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -86,6 +80,7 @@ export async function setRuleStatus(formData: FormData) {
     .update({ status })
     .eq("id", id)
     .eq("version", version)
+    .eq("status", expectedStatus)
     .select("id")
     .maybeSingle();
   if (error) throw new Error("Could not change the rule status");

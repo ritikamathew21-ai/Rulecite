@@ -56,11 +56,11 @@ for (const role of ["reviewer", "admin"] as const) {
     await signIn(page, accounts[role]);
     await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Audit log" }).click();
     await expect(page.getByRole("heading", { name: "Audit log" })).toBeVisible();
-    await expect(page.getByRole("cell", { name: "rule.created" }).first()).toBeVisible();
+    await expect(page.getByRole("table")).toBeVisible();
   });
 }
 
-test("the audit log shows real entries for a Reviewer", async ({ page }) => {
+test("the audit log shows this organisation's entry and hides another's", async ({ page }) => {
   const service = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
@@ -69,20 +69,34 @@ test("the audit log shows real entries for a Reviewer", async ({ page }) => {
     .select("id")
     .eq("name", "Fictional RLS Test Organisation A")
     .single();
+  const otherOrg = await service
+    .from("organizations")
+    .select("id")
+    .eq("name", "Fictional RLS Test Organisation B")
+    .single();
+  const marker = randomUUID();
+  const ownAction = `e2e.own.${marker}`;
+  const otherAction = `e2e.other.${marker}`;
   const email = `rls-test-e2e-${randomUUID()}@example.com`;
   const secret = randomBytes(24).toString("base64url");
   const created = await service.auth.admin.createUser({ email, password: secret, email_confirm: true });
-  if (created.error || org.error) throw new Error("Could not prepare test user");
+  if (created.error || org.error || otherOrg.error) throw new Error("Could not prepare test user");
 
   try {
     const member = await service
       .from("memberships")
       .insert({ org_id: org.data.id, user_id: created.data.user.id, role: "reviewer" });
     if (member.error) throw new Error("Could not add test user");
+    const entries = await service.from("audit_log").insert([
+      { org_id: org.data.id, action: ownAction, entity_type: "test" },
+      { org_id: otherOrg.data.id, action: otherAction, entity_type: "test" },
+    ]);
+    if (entries.error) throw new Error("Could not add test audit entries");
+
     await signIn(page, email, secret);
     await page.goto("/audit");
-    await expect(page.getByRole("table")).toBeVisible();
-    await expect(page.getByRole("cell", { name: "rls.test" }).first()).toBeVisible();
+    await expect(page.getByRole("cell", { name: ownAction, exact: true })).toBeVisible();
+    await expect(page.getByRole("cell", { name: otherAction, exact: true })).toHaveCount(0);
   } finally {
     await service.auth.admin.deleteUser(created.data.user.id);
   }
@@ -92,7 +106,7 @@ test("every navigation link leads to a working page", async ({ page }) => {
   await signIn(page, accounts.admin);
   const nav = page.getByRole("navigation", { name: "Main" });
   const hrefs = await nav.getByRole("link").evaluateAll((links) => links.map((link) => link.getAttribute("href")));
-  expect(hrefs).toEqual(["/workspace", "/rulebook", "/audit", "/trust"]);
+  expect(hrefs).toEqual(["/workspace", "/rulebook", "/ledger", "/assets", "/audit", "/trust"]);
 
   for (const href of hrefs) {
     const response = await page.goto(href!);

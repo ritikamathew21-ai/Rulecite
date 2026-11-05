@@ -110,6 +110,13 @@ test("an Admin adds, approves, edits and retires a rule", async ({ page }) => {
     await expect(page.getByText("Draft", { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Approve rule" })).toBeVisible();
 
+    // Another Admin retires the rule while this page still offers Approve.
+    const retired = await service.from("rules").update({ status: "retired" }).eq("org_id", org.data.id).eq("code", code);
+    if (retired.error) throw new Error("Could not simulate a concurrent status change");
+    await page.getByRole("button", { name: "Approve rule" }).click();
+    await expect(page.locator('main [role="alert"]')).toContainText("nothing was applied");
+    await expect(page.getByText("Retired", { exact: true })).toBeVisible();
+
     await page.goto("/audit");
     await expect(page.getByRole("cell", { name: "rule.edited" }).first()).toBeVisible();
     await expect(page.getByRole("cell", { name: "rule.approved" }).first()).toBeVisible();
