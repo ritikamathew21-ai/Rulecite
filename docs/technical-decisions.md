@@ -288,6 +288,20 @@ Access is enforced in the database by row-level security, column grants and trig
 - `npm run test:rls` proves this against the hosted project, using temporary users deleted after each run.
 - Each run adds 2 permanent audit rows to the fictional test organisations, because audit rows cannot be deleted.
 
+## Rulebook
+
+- Rules have an ID, type, severity, instruction and source excerpt. New rules start as drafts, and only Admins can add, approve or retire them.
+- Creators see approved rules only. Reviewers and Admins also see drafts, retired rules and version history.
+- Database triggers own the version number, approval details, revisions and audit entries, so clients cannot forge them.
+- Editing a rule's content creates a new version and returns it to draft, even if an approval is requested in the same change. Changing status alone does not create a version.
+- Approving, retiring, restoring and editing apply only to the version the Admin was viewing. If the rule changed, nothing is applied and the Admin is told.
+- A retired rule cannot be edited or approved until it is restored to draft. The database enforces this.
+- Seeded rules are approved by the seed script signing in as the Demo Admin, so the approver and audit entry are real.
+- Rules are retired, not deleted, so past findings can always cite them. Creators cannot read retired rules or old versions, so findings must store their own copy of the cited rule. This is required before findings ship.
+- While an edited rule waits for re-approval, it is not approved, so it will not be applied by the check engine.
+- Rule pages stream, so a hidden or missing rule shows the not-found page with HTTP 200. Row-level security keeps its content out of the response. Tests check the content rather than the status code.
+- Channel-specific rules from the Round 1 plan are postponed until documents exist.
+
 ## Authentication
 
 - There is no public registration. Accounts are created by the seed script until invites exist.
@@ -319,6 +333,7 @@ Access is enforced in the database by row-level security, column grants and trig
 
 - Visual language: a blue-pencil margin, cool paper and highlighter yellow, taken from editors marking up copy. Highlighter marks the current page and will mark flagged text in drafts.
 - Navigation shows only pages that work. Features appear when they are built.
+- The AI and data page states the current flow: Vercel Mumbai, processing in the United States (`iad1`), data in Singapore. Update it if the Function Region changes.
 - Fonts are self-hosted at build time, so visitors make no requests to Google.
 - Automated axe checks run on every page. They do not replace manual accessibility testing.
 - Pages show a loading message while slow data streams in. It does not appear until the server starts responding, because the shared layout reads the session.

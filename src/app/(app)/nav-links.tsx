@@ -10,7 +10,7 @@ export function NavLinks({ items }: { items: { href: string; label: string }[] }
     <nav aria-label="Main">
       <ul className="flex flex-wrap gap-x-4 gap-y-1 md:flex-col md:gap-2">
         {items.map(({ href, label }) => {
-          const current = pathname === href;
+          const current = pathname === href || pathname.startsWith(`${href}/`);
           return (
             <li key={href}>
               <Link

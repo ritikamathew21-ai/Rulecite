@@ -11,6 +11,33 @@ export const DEMO_USERS = [
   { email: "zentra-admin@example.com", role: "admin", name: "Demo Admin" },
 ];
 
+const GUIDE = "Zentra Brand Guide (fictional)";
+const rule = (code, type, severity, title, instruction, section, excerpt, config = {}, status = "approved") => ({
+  code,
+  type,
+  severity,
+  title,
+  instruction,
+  source_excerpt: excerpt,
+  source_name: `${GUIDE}, ${section}`,
+  config,
+  status,
+});
+
+export const DEMO_RULES = [
+  rule("MSG-04", "messaging", "high", "Superlatives need an approved source", "Do not use words like best, lowest or fastest unless an approved fact supports the claim.", "section 3.2", "Superlative claims such as lowest, best or fastest may only appear with an approved source."),
+  rule("MSG-07", "messaging", "high", "Do not promise outcomes", "Do not guarantee savings, returns or approval.", "section 3.4", "We never guarantee a financial outcome for a customer."),
+  rule("MSG-09", "messaging", "low", "Link to the fee schedule", "When mentioning fees, link to the current fee schedule.", "section 3.6", "Any mention of fees should point readers to the current fee schedule.", {}, "draft"),
+  rule("TERM-12", "terminology", "medium", "Use the approved product name", "Always write Zentra Wallet, not a generic name.", "section 2.1", "Our product is always called Zentra Wallet.", { preferred: "Zentra Wallet", variants: ["e-wallet", "ewallet", "digital wallet"] }),
+  rule("TERM-15", "terminology", "low", "Use the approved rewards name", "Always write Zentra Rewards.", "section 2.3", "Our loyalty programme is called Zentra Rewards.", { preferred: "Zentra Rewards", variants: ["cashback points", "reward points"] }),
+  rule("BAN-03", "banned_phrase", "high", "Avoid unsafe financial phrases", "Do not use phrases that hide risk.", "section 4.1", "Never describe a product as risk-free or 100% safe.", { phrases: ["risk-free", "100% safe", "instant approval"] }),
+  rule("TONE-01", "tone", "medium", "Sound friendly and plain", "Write like a helpful person. Avoid hype and jargon.", "section 1.2", "Zentra sounds friendly, plain and calm. We do not use hype."),
+  rule("CLM-02", "claim", "high", "Fee and rate claims must match approved facts", "Any fee, rate or limit must match an approved fact that has not expired.", "section 3.1", "Numbers in our content must match the current approved figures."),
+  rule("READ-01", "readability", "medium", "Write for a wide audience", "Aim for a reading grade of 9 or lower.", "section 1.4", "Customer content should be readable at about grade 9."),
+  rule("ACC-01", "accessibility", "high", "Describe every image", "Every meaningful image needs alt text.", "section 5.1", "All meaningful images must include alternative text."),
+  rule("VIS-02", "visual", "medium", "Use brand colours for text", "Text colours must come from the approved palette.", "section 6.2", "Only palette colours may be used for text."),
+];
+
 function demoPassword() {
   if (process.env.DEMO_USER_PASSWORD) return process.env.DEMO_USER_PASSWORD;
   const password = randomBytes(24).toString("base64url");
@@ -42,9 +69,25 @@ async function upsertUser(client, existingUsers, { email, name }, password) {
   return result.data.user.id;
 }
 
+// Signs in as the Demo Admin, so the approval and its audit entry are real.
+async function approveAsDemoAdmin(url, publishableKey, password, orgId, codes) {
+  const admin = createClient(url, publishableKey, { auth: { persistSession: false, autoRefreshToken: false } });
+  const email = DEMO_USERS.find(({ role }) => role === "admin").email;
+  const signedIn = await admin.auth.signInWithPassword({ email, password });
+  if (signedIn.error) throw new Error("Could not sign in as the Demo Admin");
+
+  const approved = await admin.from("rules").update({ status: "approved" }).eq("org_id", orgId).in("code", codes).select("code");
+  if (approved.error || approved.data.length !== codes.length) throw new Error("Could not approve demo rules");
+  await admin.auth.signOut({ scope: "local" });
+}
+
 async function seed() {
-  const { NEXT_PUBLIC_SUPABASE_URL: url, SUPABASE_SERVICE_ROLE_KEY: serviceKey } = process.env;
-  if (!url || !serviceKey) throw new Error("Missing Supabase settings. Use --env-file=.env.local.");
+  const {
+    NEXT_PUBLIC_SUPABASE_URL: url,
+    NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: publishableKey,
+    SUPABASE_SERVICE_ROLE_KEY: serviceKey,
+  } = process.env;
+  if (!url || !publishableKey || !serviceKey) throw new Error("Missing Supabase settings. Use --env-file=.env.local.");
 
   const client = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
   const password = demoPassword();
@@ -61,7 +104,31 @@ async function seed() {
     if (member.error) throw new Error(`Could not add ${user.email}`);
   }
 
-  console.log(`Seeded ${DEMO_ORG_NAME} with ${DEMO_USERS.length} demo accounts.`);
+  // Existing rules are left alone, so a rerun cannot undo an Admin's edits.
+  const added = await client
+    .from("rules")
+    .upsert(
+      DEMO_RULES.map((demoRule) => ({ ...demoRule, status: "draft", org_id: orgId })),
+      { onConflict: "org_id,code", ignoreDuplicates: true },
+    )
+    .select("code");
+  if (added.error) throw new Error("Could not add demo rules");
+
+  // Rules approved by an earlier seed have no approver, so they go back through approval.
+  const unattributed = await client
+    .from("rules")
+    .update({ status: "draft" })
+    .eq("org_id", orgId)
+    .eq("status", "approved")
+    .is("approved_by", null)
+    .select("code");
+  if (unattributed.error) throw new Error("Could not reset demo rules");
+
+  const waiting = new Set([...added.data, ...unattributed.data].map(({ code }) => code));
+  const toApprove = DEMO_RULES.filter(({ code, status }) => status === "approved" && waiting.has(code)).map(({ code }) => code);
+  if (toApprove.length > 0) await approveAsDemoAdmin(url, publishableKey, password, orgId, toApprove);
+
+  console.log(`Seeded ${DEMO_ORG_NAME} with ${DEMO_USERS.length} demo accounts and ${DEMO_RULES.length} rules.`);
 }
 
 if (process.argv[1]?.endsWith("seed-demo.mjs")) {

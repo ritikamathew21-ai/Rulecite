@@ -24,10 +24,14 @@ export default async function TrustPage() {
         <li>Only fictional or synthetic content may be checked with AI.</li>
       </ul>
 
-      <h2 className="mt-8 text-xl font-bold">Where your data is stored</h2>
+      <h2 className="mt-8 text-xl font-bold">Where your data is stored and processed</h2>
       <p className="mt-2">
         Accounts and workspace data are stored with Supabase in Singapore. Each organisation&apos;s data is separated
         by database access rules.
+      </p>
+      <p className="mt-2">
+        The app is hosted on Vercel. Requests currently reach a Vercel server in Mumbai and are processed in the
+        United States, which then reads and writes your data in Singapore.
       </p>
 
       <h2 className="mt-8 text-xl font-bold">People stay in charge</h2>

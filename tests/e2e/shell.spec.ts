@@ -56,7 +56,7 @@ for (const role of ["reviewer", "admin"] as const) {
     await signIn(page, accounts[role]);
     await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Audit log" }).click();
     await expect(page.getByRole("heading", { name: "Audit log" })).toBeVisible();
-    await expect(page.getByText("No activity is recorded yet.")).toBeVisible();
+    await expect(page.getByRole("cell", { name: "rule.created" }).first()).toBeVisible();
   });
 }
 
@@ -92,7 +92,7 @@ test("every navigation link leads to a working page", async ({ page }) => {
   await signIn(page, accounts.admin);
   const nav = page.getByRole("navigation", { name: "Main" });
   const hrefs = await nav.getByRole("link").evaluateAll((links) => links.map((link) => link.getAttribute("href")));
-  expect(hrefs).toEqual(["/workspace", "/audit", "/trust"]);
+  expect(hrefs).toEqual(["/workspace", "/rulebook", "/audit", "/trust"]);
 
   for (const href of hrefs) {
     const response = await page.goto(href!);
@@ -108,6 +108,7 @@ test("the demo notice is always visible and AI is described honestly", async ({ 
   await page.goto("/trust");
   await expect(page.getByRole("heading", { name: "AI checks are not active yet" })).toBeVisible();
   await expect(page.getByText("Human reviewers at Google may read it.")).toBeVisible();
+  await expect(page.getByText("processed in the United States")).toBeVisible();
 });
 
 test("keyboard users can skip to the content", async ({ page }) => {

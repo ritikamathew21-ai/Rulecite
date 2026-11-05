@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEMO_ORG_NAME, DEMO_USERS } from "../scripts/seed-demo.mjs";
+import { DEMO_ORG_NAME, DEMO_RULES, DEMO_USERS } from "../scripts/seed-demo.mjs";
 
 describe("demo seed data", () => {
   it("labels the organisation as a fictional demonstration", () => {
@@ -12,6 +12,16 @@ describe("demo seed data", () => {
 
   it("uses generic demo names", () => {
     expect(DEMO_USERS.every((user) => user.name.startsWith("Demo "))).toBe(true);
+  });
+
+  it("cites a fictional source on every rule", () => {
+    expect(DEMO_RULES.every((rule) => rule.source_name.includes("(fictional)"))).toBe(true);
+  });
+
+  it("uses valid, unique rule IDs", () => {
+    const codes = DEMO_RULES.map((rule) => rule.code);
+    expect(new Set(codes).size).toBe(codes.length);
+    expect(codes.every((code) => /^[A-Z]{2,6}-[0-9]{2,4}$/.test(code))).toBe(true);
   });
 
   it("covers each role exactly once", () => {

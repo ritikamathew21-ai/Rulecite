@@ -33,6 +33,24 @@ describe("Zentra demo", () => {
     expect(members.data?.find((row) => row.user_id === userId)?.role).toBe(role);
   });
 
+  it("gives a Creator approved rules only", async () => {
+    const { client } = await signIn("zentra-creator@example.com");
+    const { data } = await client.from("rules").select("code, status");
+    expect(data?.length).toBe(10);
+    expect(data?.every((rule) => rule.status === "approved")).toBe(true);
+  });
+
+  it("records the Demo Admin as the approver of every approved rule", async () => {
+    const { userId } = await signIn("zentra-admin@example.com");
+    const { client } = await signIn("zentra-reviewer@example.com");
+    const { data } = await client.from("rules").select("approved_by, approved_at").eq("status", "approved");
+    expect(data?.length).toBe(10);
+    expect(data?.every((rule) => rule.approved_by === userId && rule.approved_at)).toBe(true);
+
+    const audit = await client.from("audit_log").select("actor_id").eq("action", "rule.approved").eq("entity_id", "MSG-04");
+    expect(audit.data).toContainEqual({ actor_id: userId });
+  });
+
   it("keeps the audit log from the Creator", async () => {
     const { client } = await signIn("zentra-creator@example.com");
     const { data } = await client.from("audit_log").select("id");

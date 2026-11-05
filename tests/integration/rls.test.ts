@@ -271,6 +271,205 @@ describe("Admin", () => {
   });
 });
 
+describe("Rulebook", () => {
+  const unique = () => `TST-${Math.floor(1000 + Math.random() * 9000)}`;
+  const content = {
+    type: "messaging",
+    severity: "high",
+    title: "Fictional test rule",
+    instruction: "Superlatives need an approved source.",
+    source_excerpt: "Fictional guide excerpt.",
+    source_name: "Fictional test guide",
+  };
+  let approved: { id: string; code: string };
+  let draft: { id: string; code: string };
+  let otherOrg: { id: string; code: string };
+
+  const addRule = async (org: string, status: string) => {
+    const { data, error } = await service
+      .from("rules")
+      .insert({ ...content, org_id: orgIds[org], code: unique(), status })
+      .select("id, code")
+      .single();
+    if (error) throw new Error("Could not add test rule");
+    return data;
+  };
+  const rule = async (id: string) => (await service.from("rules").select("*").eq("id", id).single()).data;
+
+  beforeAll(async () => {
+    approved = await addRule(ORG_A, "approved");
+    draft = await addRule(ORG_A, "draft");
+    otherOrg = await addRule(ORG_B, "approved");
+  });
+
+  afterAll(async () => {
+    await service.from("rules").delete().in("org_id", [orgIds[ORG_A], orgIds[ORG_B]]);
+  });
+
+  it("is closed to anonymous visitors", async () => {
+    for (const table of ["rules", "rule_revisions"]) {
+      expect((await anon.from(table).select("*")).error?.code).toBe("42501");
+    }
+  });
+
+  it("shows a Creator approved rules only", async () => {
+    const { data } = await as.creatorA.from("rules").select("id").in("id", [approved.id, draft.id]);
+    expect(data).toEqual([{ id: approved.id }]);
+  });
+
+  it("shows Reviewers and Admins drafts too", async () => {
+    for (const persona of ["reviewerA", "adminA"] as const) {
+      const { data } = await as[persona].from("rules").select("id").in("id", [approved.id, draft.id]);
+      expect(data?.length).toBe(2);
+    }
+  });
+
+  it("hides rules from other organisations and non-members", async () => {
+    expect((await as.adminA.from("rules").select("id").eq("id", otherOrg.id)).data).toEqual([]);
+    expect((await as.outsider.from("rules").select("id")).data).toEqual([]);
+  });
+
+  it("lets only Admins add rules, always as drafts", async () => {
+    const row = { ...content, org_id: orgIds[ORG_A], code: unique() };
+    for (const persona of ["creatorA", "reviewerA", "adminB", "outsider"] as const) {
+      expect((await as[persona].from("rules").insert(row)).error?.code).toBe("42501");
+    }
+    const { data, error } = await as.adminA.from("rules").insert(row).select("status, version, created_by").single();
+    expect(error).toBeNull();
+    expect(data).toEqual({ status: "draft", version: 1, created_by: ids.adminA });
+  });
+
+  it("stops anyone choosing a status, version or author on insert", async () => {
+    for (const extra of [{ status: "approved" }, { version: 9 }, { created_by: ids.creatorA }]) {
+      const row: Record<string, unknown> = { ...content, org_id: orgIds[ORG_A], code: unique(), ...extra };
+      expect((await as.adminA.from("rules").insert(row)).error?.code).toBe("42501");
+    }
+  });
+
+  it("rejects invalid rule codes and duplicates", async () => {
+    const invalid = await as.adminA.from("rules").insert({ ...content, org_id: orgIds[ORG_A], code: "not a code" });
+    expect(invalid.error?.code).toBe("23514");
+    const duplicate = await as.adminA.from("rules").insert({ ...content, org_id: orgIds[ORG_A], code: draft.code });
+    expect(duplicate.error?.code).toBe("23505");
+  });
+
+  it("stops non-Admins approving or editing", async () => {
+    for (const persona of ["creatorA", "reviewerA", "adminB"] as const) {
+      const { data } = await as[persona].from("rules").update({ status: "approved" }).eq("id", draft.id).select();
+      expect(data).toEqual([]);
+    }
+    expect((await rule(draft.id))?.status).toBe("draft");
+  });
+
+  it("records who approved a rule, and audits it", async () => {
+    const target = await addRule(ORG_A, "draft");
+    const { error } = await as.adminA.from("rules").update({ status: "approved" }).eq("id", target.id);
+    expect(error).toBeNull();
+    const saved = await rule(target.id);
+    expect(saved?.status).toBe("approved");
+    expect(saved?.approved_by).toBe(ids.adminA);
+    expect(saved?.approved_at).not.toBeNull();
+
+    const { data } = await as.reviewerA.from("audit_log").select("action, actor_id").eq("entity_id", target.code);
+    expect(data).toContainEqual({ action: "rule.approved", actor_id: ids.adminA });
+  });
+
+  it("sends an edited approved rule back to draft as a new version", async () => {
+    const target = await addRule(ORG_A, "approved");
+    const { error } = await as.adminA.from("rules").update({ title: "Changed title" }).eq("id", target.id);
+    expect(error).toBeNull();
+    const saved = await rule(target.id);
+    expect(saved).toMatchObject({ status: "draft", version: 2, title: "Changed title", approved_by: null });
+
+    const { data } = await as.reviewerA.from("rule_revisions").select("version").eq("rule_id", target.id).order("version");
+    expect(data).toEqual([{ version: 1 }, { version: 2 }]);
+  });
+
+  it("cannot approve and edit in one step", async () => {
+    const target = await addRule(ORG_A, "draft");
+    await as.adminA.from("rules").update({ title: "Sneaky edit", status: "approved" }).eq("id", target.id);
+    expect((await rule(target.id))?.status).toBe("draft");
+  });
+
+  it("does not create a version when only the status changes", async () => {
+    const target = await addRule(ORG_A, "draft");
+    await as.adminA.from("rules").update({ status: "approved" }).eq("id", target.id);
+    await as.adminA.from("rules").update({ status: "retired" }).eq("id", target.id);
+    expect(await rule(target.id)).toMatchObject({ status: "retired", version: 1, approved_by: null });
+  });
+
+  it("stops non-Admins retiring or restoring rules", async () => {
+    const active = await addRule(ORG_A, "approved");
+    const retired = await addRule(ORG_A, "retired");
+    for (const persona of ["creatorA", "reviewerA", "adminB", "outsider"] as const) {
+      await as[persona].from("rules").update({ status: "retired" }).eq("id", active.id);
+      await as[persona].from("rules").update({ status: "draft" }).eq("id", retired.id);
+    }
+    expect((await rule(active.id))?.status).toBe("approved");
+    expect((await rule(retired.id))?.status).toBe("retired");
+  });
+
+  it("makes a retired rule go through draft before approval", async () => {
+    const target = await addRule(ORG_A, "retired");
+    const direct = await as.adminA.from("rules").update({ status: "approved" }).eq("id", target.id);
+    expect(direct.error?.code).toBe("23514");
+    expect((await rule(target.id))?.status).toBe("retired");
+
+    expect((await as.adminA.from("rules").update({ status: "draft" }).eq("id", target.id)).error).toBeNull();
+    expect((await as.adminA.from("rules").update({ status: "approved" }).eq("id", target.id)).error).toBeNull();
+    expect(await rule(target.id)).toMatchObject({ status: "approved", approved_by: ids.adminA });
+  });
+
+  it("stops a retired rule being edited", async () => {
+    const target = await addRule(ORG_A, "retired");
+    const edit = await as.adminA.from("rules").update({ title: "Changed" }).eq("id", target.id);
+    expect(edit.error?.code).toBe("23514");
+    expect(await rule(target.id)).toMatchObject({ status: "retired", version: 1, title: content.title });
+  });
+
+  it("does not apply an approval to a version the Admin did not see", async () => {
+    const target = await addRule(ORG_A, "draft");
+    await as.adminA.from("rules").update({ title: "Edited by another Admin" }).eq("id", target.id);
+    const stale = await as.adminA
+      .from("rules")
+      .update({ status: "approved" })
+      .eq("id", target.id)
+      .eq("version", 1)
+      .select("id");
+    expect(stale.data).toEqual([]);
+    expect(await rule(target.id)).toMatchObject({ status: "draft", version: 2 });
+  });
+
+  it("protects the code, organisation, version and approval fields", async () => {
+    for (const change of [
+      { code: "ZZ-99" },
+      { org_id: orgIds[ORG_B] },
+      { version: 9 },
+      { approved_by: ids.creatorA },
+      { created_by: ids.creatorA },
+    ]) {
+      expect((await as.adminA.from("rules").update(change).eq("id", draft.id)).error?.code).toBe("42501");
+    }
+  });
+
+  it("has no client delete", async () => {
+    expect((await as.adminA.from("rules").delete().eq("id", draft.id)).error?.code).toBe("42501");
+  });
+
+  it("keeps rule history from Creators and other organisations", async () => {
+    expect((await as.creatorA.from("rule_revisions").select("rule_id")).data).toEqual([]);
+    expect((await as.adminB.from("rule_revisions").select("rule_id").eq("rule_id", approved.id)).data).toEqual([]);
+    const { data } = await as.reviewerA.from("rule_revisions").select("rule_id").eq("rule_id", approved.id);
+    expect(data?.length).toBe(1);
+  });
+
+  it("gives clients no write access to rule history", async () => {
+    const write = { rule_id: approved.id, version: 99, org_id: orgIds[ORG_A], snapshot: {} };
+    expect((await as.adminA.from("rule_revisions").insert(write)).error?.code).toBe("42501");
+    expect((await as.adminA.from("rule_revisions").delete().eq("rule_id", approved.id)).error?.code).toBe("42501");
+  });
+});
+
 describe("private helpers", () => {
   it("are not reachable through the API", async () => {
     const args = { target_org: orgIds[ORG_B] };
