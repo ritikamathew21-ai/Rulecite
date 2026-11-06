@@ -365,6 +365,31 @@ Access is enforced in the database by row-level security, column grants and trig
 - This is a signal for a person to review, not a measure of rule quality. Small numbers can mislead.
 - It reads the latest 5,000 rows, which suits the demo. Larger organisations would need aggregation in the database.
 
+## Accuracy measurement
+
+- The golden set in `tests/golden` has 18 fictional documents and 28 labelled problems: 12 documents for development and 6 held out for measurement. Labels were written before any model run.
+- A finding is correct when it names the labelled rule and overlaps the labelled words. Some borderline findings are listed as allowed and count neither way.
+- `npm run eval:golden` rescores saved responses with no AI calls. `GOLDEN_CALLS=1` fetches missing responses, one request each with no retry.
+- Baseline, 3 runs on `gemini-3.1-flash-lite`, held-out documents: precision 87.5%, recall 87.5%, F1 87.5%. Expired offers were missed 6 of 6 times across both splits.
+- The first attempt asked the model to report every claim. It failed: the expired offer was still missed 3 of 3 times on development documents, so it was reverted. The held-out documents were not used.
+- The kept change marks expired facts in the prompt. Code decides what has expired. Held-out documents had one evaluation pass on the final prompt: 6 documents, 3 repeated model runs each, 18 responses. Precision 95.8%, recall 95.8%, F1 95.8%. Expired offers were caught 6 of 6 times across both splits.
+- A label review after the results changed 4 labels, plus a sensitivity check on "best" in `d09`. It is recorded in `tests/golden/adjudication.ts`. The original labels in `documents.ts` were not changed, and they are the only labels set in advance.
+
+| Set | Labels | Version | Precision | Recall | F1 | TP | FP | FN |
+|---|---|---|---|---|---|---|---|---|
+| Held-out | Original | Baseline | 87.5% | 87.5% | 87.5% | 21 | 3 | 3 |
+| Held-out | Original | Expired facts marked | 95.8% | 95.8% | 95.8% | 23 | 1 | 1 |
+| Held-out | Post-result adjudication | Baseline | 88.0% | 81.5% | 84.6% | 22 | 3 | 5 |
+| Held-out | Post-result adjudication | Expired facts marked | 95.8% | 85.2% | 90.2% | 23 | 1 | 4 |
+| Development | Original | Baseline | 82.1% | 91.7% | 86.6% | 55 | 12 | 5 |
+| Development | Original | Expired facts marked | 84.5% | 100.0% | 91.6% | 60 | 11 | 0 |
+| Development | Post-result adjudication | Baseline | 87.7% | 92.8% | 90.1% | 64 | 9 | 5 |
+| Development | Post-result adjudication | Expired facts marked | 88.3% | 98.6% | 93.2% | 68 | 9 | 1 |
+
+- Counts add up across 3 runs. Held-out: 6 documents, 18 responses per version, 24 label instances originally and 27 after adjudication. Development: 12 documents, 36 responses per version, 60 and 69. True negatives are not defined, because there is no fixed list of non-problems.
+- Limits: the sample is small, and the original labels were written by the same AI-assisted author. Held-out F1 per run overlapped at 93.3% on the original labels (baseline 82.4% to 93.3%, after 93.3% to 100%). The held-out set was not fully blind, because the baseline report showed its errors before the fix was chosen, although tuning used development documents only. The adjudication was not blind either, because score effects were visible. These are benchmark results, not a general accuracy claim.
+- Known errors that remain: "risk-free" is flagged in a sentence that denies it, "best" is flagged in ordinary use, and "never run out" was not caught under an accepted rule in any kept-change run.
+
 ## Authentication
 
 - There is no public registration. Accounts are created by the seed script until invites exist.

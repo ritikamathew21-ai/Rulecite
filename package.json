@@ -17,7 +17,8 @@
     "test:rls": "node --env-file=.env.local node_modules/vitest/vitest.mjs run --config vitest.integration.config.mts",
     "db:seed": "node --env-file=.env.local scripts/seed-demo.mjs",
     "db:writer": "node --env-file=.env.local scripts/set-check-writer.mjs",
-    "test:e2e": "node --env-file=.env.local node_modules/@playwright/test/cli.js test"
+    "test:e2e": "node --env-file=.env.local node_modules/@playwright/test/cli.js test",
+    "eval:golden": "node --env-file=.env.local node_modules/vitest/vitest.mjs run --config vitest.eval.config.mts"
   },
   "dependencies": {
     "@google/genai": "2.32.0",

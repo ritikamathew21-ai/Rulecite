@@ -72,7 +72,7 @@ async function runAiChecks(
 
   const used = { provider: provider.name, model: provider.model };
   try {
-    const raw = await analyzeWithRetry(provider, buildPrompt(version.plain_text, usableRules, usableFacts), aiTimeoutMs());
+    const raw = await analyzeWithRetry(provider, buildPrompt(version.plain_text, usableRules, usableFacts, today), aiTimeoutMs());
     return { ...verifyAiOutput(raw, version.plain_text, usableRules, usableFacts, today), failureReason: null, ...used };
   } catch (failure) {
     const reason = failure instanceof ProviderError ? failure.reason : "provider_unavailable";

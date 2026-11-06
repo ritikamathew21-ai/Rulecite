@@ -28,9 +28,10 @@ export const aiRules = (rules: ApprovedRule[]) => rules.filter(({ type }) => AI_
 export const aiFacts = (facts: ApprovedFact[], today: string) =>
   facts.filter((fact) => factValidity(fact.valid_from, fact.expires_on, today) !== "not_yet_valid");
 
-export function buildPrompt(text: string, rules: ApprovedRule[], facts: ApprovedFact[]) {
+export function buildPrompt(text: string, rules: ApprovedRule[], facts: ApprovedFact[], today: string) {
   const ruleLines = rules.map((rule) => `${rule.code} (${rule.type}): ${rule.instruction}`).join("\n");
-  const factLines = facts.map((fact) => `${fact.code}: ${fact.statement}`).join("\n") || "None";
+  const expired = (fact: ApprovedFact) => factValidity(fact.valid_from, fact.expires_on, today) === "expired";
+  const factLines = facts.map((fact) => `${fact.code}${expired(fact) ? " (EXPIRED)" : ""}: ${fact.statement}`).join("\n") || "None";
 
   const system = `You review marketing copy against a brand's approved rules and facts.
 
@@ -40,6 +41,7 @@ For a claim rule, compare the claim with the approved facts:
 - relation "supports" with fact_code when a fact backs the claim.
 - relation "contradicts" with fact_code when a fact disagrees with the claim.
 - relation "none" with an empty fact_code when no fact covers the claim.
+A fact marked EXPIRED no longer applies, so a claim that matches it breaks the rule. Report it with relation "supports" and that fact_code.
 For other rules, use relation "none" and an empty fact_code.
 Keep suggestions faithful to what the writer meant to say.
 Set replacement to the exact words that could replace the quote, or an empty string if a person must rewrite it.
