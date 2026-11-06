@@ -6,7 +6,7 @@ Built by Ritika Mathew (Team Nexora) for CodeNexus India 2026, Round 2, on the I
 
 - **Live app:** <https://rulecite-eight.vercel.app/>. This is the only deployed address for this project.
 - **Not this project:** `rulecite.vercel.app` is not our deployment. It redirects to `www.rulecites.com`, a separate marketing-compliance product called RuleCites.
-- **Access:** there is no public registration. Demo logins for the three roles are shared privately with judges and are not stored in this repository.
+- **Access:** there is no public registration. Sign-in details for the three demo roles are on page 1 of the project PDF in the Round 2 submission, and are not stored in this repository.
 - **Data:** the demo brand, Vornelle, is fictional. Do not enter real, confidential or personal content. AI checks use the Gemini free tier, where Google may use submitted content to improve its products and human reviewers may read it.
 
 ## What it does
@@ -93,7 +93,7 @@ Set `AI_PROVIDER=disabled` to run without Gemini. Code checks still work.
 | Command | What it covers | Last result |
 |---|---|---|
 | `npm test` | Unit tests, with no AI calls | 310 of 310 on 2026-11-06 |
-| `npm run test:e2e` | Browser journeys and axe checks on a production build, with AI disabled. Run `npm run build` first | 62 of 62 on 2026-11-06 |
+| `npm run test:e2e` | Browser journeys and axe checks on a production build, with AI disabled. Run `npm run build` first. Runs appear to add permanent audit rows to fictional test organisations | 62 of 62 on 2026-11-06 |
 | `npm run test:rls` | Access rules and demo data on the hosted database. Each run adds permanent audit rows to fictional test organisations | 115 of 115 on 2026-11-05, before the demo brand was renamed |
 | `npm run eval:golden` | Rescores saved AI responses, with no AI calls | Reports in `tests/golden/results` |
 

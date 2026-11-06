@@ -4,7 +4,8 @@ Team Nexora, CodeNexus India 2026. Sole participant: Ritika Mathew.
 
 - **Live app:** <https://rulecite-eight.vercel.app/>. This is the only deployed address for this project.
 - **Not this project:** `rulecite.vercel.app` is not our deployment. It redirects to `www.rulecites.com`, a separate marketing-compliance product called RuleCites.
-- **Source:** <https://github.com/ritikamathew21-ai/Rulecite>. The repository is private, so this link only works for accounts with access. Judge access is to be arranged before submission.
+- **Source:** <https://github.com/ritikamathew21-ai/Rulecite>. The submission form requires a public repository.
+- **Demo sign-in:** the details are on page 1 of the project PDF in the Round 2 submission, and are not stored in this repository.
 - **Build dates:** every commit is dated within the official window of 4 to 7 November 2026. The first commit is dated 5 November 2026.
 
 ## Progress against the Round 1 plan
@@ -27,6 +28,12 @@ These were planned for Round 3. Work has started early.
 | Guideline Gap Radar | Done | Insights page, for Reviewers and Admins |
 | PDF and image checks | Partly done | PDF text checks work. Alt-text, contrast and palette checks work on DOCX files. PDF images and uploaded image files are not checked |
 | Measured accuracy uplift | Done, with limits | Held-out F1 rose from 87.5% to 95.8% on the original labels, and from 84.6% to 90.2% on labels adjudicated after the results. See [Accuracy measurement](technical-decisions.md#accuracy-measurement) |
+
+### Improvements committed for Round 3
+
+1. **Full visual review:** image uploads, images and colours inside PDFs, and logo checks against approved assets.
+2. **Guideline import and team onboarding:** turn an uploaded brand guide into draft rules for an Admin to approve, and add member invites.
+3. **Retrieval and stronger accuracy:** send only relevant rules and facts, expand the golden set with independently reviewed labels, and reduce known false alarms.
 
 ### Changes from the plan
 
@@ -82,6 +89,7 @@ On the Gemini free tier, Google may use submitted content to improve its product
 ## Datasets
 
 - **Vornelle demo data:** a fictional brand with rules, facts and colours in `scripts/seed-demo.mjs`, written for this project.
+- **Sample documents:** four fictional Vornelle documents on the live demo, in different workflow states. They and their decisions are demo data, so Insights reflects demo decisions, not real users.
 - **Golden set:** 18 fictional documents in `tests/golden/documents.ts`, written for this project with AI assistance. They use the demo brand's earlier name, Zentra. Changing the text would invalidate the saved responses and scores, so they were left as measured.
 - No external or real customer datasets are used.
 
@@ -113,17 +121,14 @@ Other evidence, which is not user testing of the product:
 
 ## Contribution statement
 
-> **DRAFT. Ritika must confirm or rewrite this personally before submission.**
+**Ritika Mathew — Team Lead and Sole Participant**
 
-**Ritika Mathew (team lead, sole participant)**
+Ritika defined the product concept, scope, target users and initial development plan, and conducted the Round 1 survey. She directed the development process stage by stage, established the project's budget, data-handling, security and evaluation constraints, and made the key product and technical decisions, including the selection of the AI provider and model.
 
-- Defined the product, scope, users and Round 1 plan, and ran the Round 1 survey.
-- Directed the build stage by stage, and set the constraints on budget, data, security and honest reporting.
-- Reviewed each stage and approved every commit, push and Gemini test.
-- Chose the AI provider and model, and made the owner decisions recorded in the technical decisions.
-- Set up and configured GitHub, Vercel, Supabase and the Gemini key.
-- Tested the deployed app by hand, and reviewed and adjudicated the golden-set labels.
+She configured the GitHub repository, Vercel deployment, Supabase database and Gemini API integration. She reviewed development milestones, tested the deployed application, evaluated and adjudicated the golden-set labels, and approved the project's commits, pushes and AI evaluation runs.
 
-**Claude Code** wrote most of the code and documentation under that direction, as disclosed above.
+**AI Assistance — Claude Code**
 
-The Round 1 deck planned for the sole developer to own every line of the product. In practice most code was written by Claude Code, while decisions, review and approval stayed with Ritika.
+Claude Code was used extensively as the primary AI coding assistant. It generated most of the application's source code and technical documentation under Ritika's direction. Ritika remained responsible for defining requirements, making project decisions, reviewing outputs, testing functionality and approving changes.
+
+The Round 1 presentation described the intended sole-developer contribution. The actual development process involved substantial AI-generated code, and this is disclosed here for accuracy and transparency.
