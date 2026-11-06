@@ -108,14 +108,14 @@ test("Reviewers see their own organisation's unclear rules", async ({ page }) =>
 });
 
 test("Creators cannot open Insights", async ({ page }) => {
-  await signIn(page, "zentra-creator@example.com", process.env.DEMO_USER_PASSWORD!);
+  await signIn(page, "vornelle-creator@example.com", process.env.DEMO_USER_PASSWORD!);
   await expect(page.getByRole("link", { name: "Insights" })).toHaveCount(0);
   await page.goto("/insights");
   await expect(page).toHaveURL(/\/documents$/);
 });
 
 test("Insights explains itself when there is too little data", async ({ page }) => {
-  await signIn(page, "zentra-reviewer@example.com", process.env.DEMO_USER_PASSWORD!);
+  await signIn(page, "vornelle-reviewer@example.com", process.env.DEMO_USER_PASSWORD!);
   await page.goto("/insights");
   await expect(page.getByRole("heading", { name: "Rules that may be unclear" })).toBeVisible();
   await expect(page.getByText("No rules stand out yet.")).toBeVisible();

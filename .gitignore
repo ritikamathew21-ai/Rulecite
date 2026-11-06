@@ -36,3 +36,6 @@ supabase/.branches/
 .DS_Store
 Thumbs.db
 *.log
+
+# Private judge access notes
+*.local.md

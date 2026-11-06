@@ -36,9 +36,9 @@ describe("parseRule", () => {
   });
 
   it("builds terminology settings from commas and new lines", () => {
-    const result = parseRule({ ...base, type: "terminology", preferred: "Zentra Wallet", terms: "e-wallet, ewallet\n digital wallet ,," });
+    const result = parseRule({ ...base, type: "terminology", preferred: "Vornelle Wallet", terms: "e-wallet, ewallet\n digital wallet ,," });
     expect(result).toMatchObject({
-      data: { config: { preferred: "Zentra Wallet", variants: ["e-wallet", "ewallet", "digital wallet"] } },
+      data: { config: { preferred: "Vornelle Wallet", variants: ["e-wallet", "ewallet", "digital wallet"] } },
     });
   });
 

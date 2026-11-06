@@ -29,7 +29,7 @@ describe(".env.example", () => {
 });
 
 describe(".gitignore", () => {
-  it.each([".env", ".env.local", ".env.production", "key.pem", "survey_links.md"])(
+  it.each([".env", ".env.local", ".env.production", "key.pem", "survey_links.md", "judge-access.local.md"])(
     "ignores %s",
     (path) => expect(isIgnored(path)).toBe(true),
   );

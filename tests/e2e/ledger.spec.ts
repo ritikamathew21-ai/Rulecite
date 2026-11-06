@@ -137,14 +137,14 @@ test("an Admin adds, approves and retires a colour", async ({ page }) => {
 });
 
 test("a Creator reads approved facts and colours, and cannot change them", async ({ page }) => {
-  await signIn(page, "zentra-creator@example.com");
+  await signIn(page, "vornelle-creator@example.com");
   await page.goto("/ledger");
   await expect(page.getByRole("link", { name: "FACT-01" })).toBeVisible();
   await expect(page.getByRole("link", { name: "FACT-06" })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Add fact" })).toHaveCount(0);
 
   await page.getByRole("link", { name: "FACT-01" }).click();
-  await expect(page.getByText("Zentra Fee Schedule (fictional)")).toBeVisible();
+  await expect(page.getByText("Vornelle Fee Schedule (fictional)")).toBeVisible();
   await expect(page.getByRole("button", { name: /Approve|Retire/ })).toHaveCount(0);
   await expect(page.getByText("Version history")).toHaveCount(0);
   await page.goto(`${page.url()}/edit`);
@@ -162,7 +162,7 @@ test("a Creator reads approved facts and colours, and cannot change them", async
 });
 
 test("an expired fact is clearly marked", async ({ page }) => {
-  await signIn(page, "zentra-creator@example.com");
+  await signIn(page, "vornelle-creator@example.com");
   await page.goto("/ledger");
   const row = page.getByRole("row", { name: /FACT-03/ });
   await expect(row.getByText("Expired")).toBeVisible();
@@ -172,14 +172,14 @@ test("an expired fact is clearly marked", async ({ page }) => {
 
 test("a Creator cannot open a draft fact by its address", async ({ page }) => {
   const draft = await service.from("facts").select("id").eq("code", "FACT-06").single();
-  await signIn(page, "zentra-creator@example.com");
+  await signIn(page, "vornelle-creator@example.com");
   await page.goto(`/ledger/${draft.data?.id}`);
   await expect(page.getByRole("heading", { name: "Page not found" })).toBeVisible();
   expect(await page.content()).not.toContain("Weekend support");
 });
 
 test("a Reviewer sees drafts and history, but cannot approve", async ({ page }) => {
-  await signIn(page, "zentra-reviewer@example.com");
+  await signIn(page, "vornelle-reviewer@example.com");
   await page.goto("/ledger");
   await page.getByRole("link", { name: "FACT-06" }).click();
   await expect(page.getByText(/^Version 1, saved/)).toBeVisible();
@@ -190,7 +190,7 @@ test("a Reviewer sees drafts and history, but cannot approve", async ({ page }) 
 });
 
 test("Ledger and Assets pages have no automated accessibility violations", async ({ page }) => {
-  await signIn(page, "zentra-admin@example.com");
+  await signIn(page, "vornelle-admin@example.com");
   for (const path of ["/ledger", "/ledger/new", "/assets", "/assets/new"]) {
     await page.goto(path);
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();

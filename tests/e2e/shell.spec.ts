@@ -5,9 +5,9 @@ import { createClient } from "@supabase/supabase-js";
 
 const password = process.env.DEMO_USER_PASSWORD!;
 const accounts = {
-  creator: "zentra-creator@example.com",
-  reviewer: "zentra-reviewer@example.com",
-  admin: "zentra-admin@example.com",
+  creator: "vornelle-creator@example.com",
+  reviewer: "vornelle-reviewer@example.com",
+  admin: "vornelle-admin@example.com",
 };
 
 async function signIn(page: Page, email: string, secret = password) {

@@ -27,7 +27,7 @@ const rule = (overrides: Partial<ApprovedRule>): ApprovedRule => ({
 const terminology = rule({
   code: "TERM-12",
   type: "terminology",
-  config: { preferred: "Zentra Wallet", variants: ["e-wallet", "wallet"] },
+  config: { preferred: "Vornelle Wallet", variants: ["e-wallet", "wallet"] },
 });
 const banned = rule({ code: "BAN-03", type: "banned_phrase", severity: "high", config: { phrases: ["risk-free"] } });
 const plain = (text: string): ParsedDocument => ({ text, images: [], colours: [] });
@@ -84,15 +84,15 @@ describe("runDeterministicChecks", () => {
       category: "terminology",
       severity: "medium",
       quote: "e-wallet",
-      suggestion: 'Replace it with "Zentra Wallet".',
-      replacement: "Zentra Wallet",
+      suggestion: 'Replace it with "Vornelle Wallet".',
+      replacement: "Vornelle Wallet",
       citation: { code: "TERM-12", version: 3, source_excerpt: "Fictional excerpt.", source_name: "Fictional guide" },
     });
     expect(text.slice(found.start!, found.end!)).toBe("e-wallet");
   });
 
   it("does not flag a variant inside the approved term", () => {
-    expect(runDeterministicChecks(plain("Open your Zentra Wallet."), [terminology], [])).toEqual([]);
+    expect(runDeterministicChecks(plain("Open your Vornelle Wallet."), [terminology], [])).toEqual([]);
   });
 
   it("flags every occurrence of a banned phrase, with no automatic fix", () => {
@@ -102,7 +102,7 @@ describe("runDeterministicChecks", () => {
   });
 
   it("returns nothing for clean text", () => {
-    expect(runDeterministicChecks(plain("Pay your bills with Zentra Wallet."), [terminology, banned], [])).toEqual([]);
+    expect(runDeterministicChecks(plain("Pay your bills with Vornelle Wallet."), [terminology, banned], [])).toEqual([]);
   });
 
   it("leaves tone, messaging and claims to AI checks", () => {
@@ -131,7 +131,7 @@ describe("runDeterministicChecks", () => {
   });
 
   it("flags images without alt text", () => {
-    const document = { ...plain("Text"), images: [{ name: "Hero", alt: " " }, { name: "Logo", alt: "Zentra logo" }] };
+    const document = { ...plain("Text"), images: [{ name: "Hero", alt: " " }, { name: "Logo", alt: "Vornelle logo" }] };
     const found = runDeterministicChecks(document, [rule({ code: "ACC-01", type: "accessibility" })], []);
     expect(found).toHaveLength(1);
     expect(found[0].explanation).toContain("Hero");
@@ -170,11 +170,11 @@ describe("runDeterministicChecks", () => {
 
 describe("applyFixes", () => {
   const text = "Our e-wallet is risk-free.";
-  const walletFix = { start: 4, end: 12, quote: "e-wallet", replacement: "Zentra Wallet" };
+  const walletFix = { start: 4, end: 12, quote: "e-wallet", replacement: "Vornelle Wallet" };
   const riskFix = { start: 16, end: 25, quote: "risk-free", replacement: "low-risk" };
 
   it("applies several fixes in any order, keeping offsets correct", () => {
-    const expected = { text: "Our Zentra Wallet is low-risk.", applied: 2 };
+    const expected = { text: "Our Vornelle Wallet is low-risk.", applied: 2 };
     expect(applyFixes(text, [walletFix, riskFix])).toEqual(expected);
     expect(applyFixes(text, [riskFix, walletFix])).toEqual(expected);
   });
@@ -231,11 +231,11 @@ describe("readDocumentXml", () => {
 
   it("reads images with and without alt text", () => {
     const xml = documentXml(
-      '<w:p><w:r><w:t>Text</w:t></w:r></w:p><wp:docPr id="1" name="Hero"/><wp:docPr id="2" name="Logo" descr="Zentra &amp; logo"/>',
+      '<w:p><w:r><w:t>Text</w:t></w:r></w:p><wp:docPr id="1" name="Hero"/><wp:docPr id="2" name="Logo" descr="Vornelle &amp; logo"/>',
     );
     expect(readDocumentXml(xml).images).toEqual([
       { name: "Hero", alt: "" },
-      { name: "Logo", alt: "Zentra & logo" },
+      { name: "Logo", alt: "Vornelle & logo" },
     ]);
   });
 

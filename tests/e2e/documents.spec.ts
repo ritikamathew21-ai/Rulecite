@@ -19,7 +19,7 @@ async function signIn(page: Page, email: string, secret: string) {
 
 type Account = { id: string; email: string; secret: string };
 
-// Everything happens in a fictional test organisation, so Zentra's demo data stays clean.
+// Everything happens in a fictional test organisation, so Vornelle's demo data stays clean.
 async function withTestOrganisation(run: (org: string, creator: Account, otherCreator: Account, reviewer: Account) => Promise<void>) {
   const org = await service.from("organizations").select("id").eq("name", "Fictional RLS Test Organisation A").single();
   if (org.error) throw new Error("Could not find the test organisation");

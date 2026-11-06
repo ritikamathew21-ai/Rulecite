@@ -1,23 +1,23 @@
 # Rulecite technical decisions
 
-Status: **approved by the project owner on 2026-11-04**. Last updated 2026-11-04.
+Status: **approved by the project owner on 2026-11-04**. Last updated 2026-11-06.
 
-Milestone 1 is in progress, and Gemini integration has not started. Live Gemini results are recorded under TD-05. Everything else about Gemini comes from Google's documentation or the SDK's type definitions.
+The product is built and deployed. Early decisions below keep the reasoning from the time, and they are updated where the build differs. Gemini facts dated 2026-11-04 come from Google's documentation, the SDK's type definitions and the live tests under TD-05.
 
 ## Summary
 
 | ID | Decision | Status |
 |---|---|---|
-| TD-01 | Next.js, TypeScript, route handlers on Vercel | Proposed |
-| TD-02 | Supabase for Postgres, Auth, row-level security and private Storage | Proposed |
-| TD-03 | Postgres filters and full-text search instead of pgvector | Proposed, changes deck slide 11 |
+| TD-01 | Next.js, TypeScript, route handlers on Vercel | In use |
+| TD-02 | Supabase for Postgres, Auth and row-level security | In use. Storage is not used, because uploads are not kept |
+| TD-03 | No pgvector. Rules are selected by type, and full-text search is planned | In use, changes deck slide 11 |
 | TD-04 | Gemini API free tier as the AI provider | Decided by project owner, changes deck slide 11 |
-| TD-05 | `gemini-3.1-flash-lite` as the default model | Decided by project owner, model ID recognised, reliability unproven |
-| TD-06 | `generateContent` as the provisional route | Provisional, not proven reliable |
-| TD-07 | Provider-neutral analysis engine | Proposed |
-| TD-08 | Deterministic checks never depend on AI | Proposed |
-| TD-09 | AI failure produces a `partial` run | Proposed |
-| TD-10 | Validate, then verify, before saving AI findings | Proposed |
+| TD-05 | `gemini-3.1-flash-lite` as the default model | Decided by project owner, in use, with temporary provider errors seen |
+| TD-06 | `generateContent` as the provisional route | In use, with temporary provider errors seen |
+| TD-07 | Provider-neutral analysis engine | In use |
+| TD-08 | Deterministic checks never depend on AI | In use |
+| TD-09 | AI failure produces a `partial` run | In use |
+| TD-10 | Validate, then verify, before saving AI findings | In use |
 | TD-11 | Fictional or synthetic data only through the free tier | Decided by project owner, changes deck slide 14 |
 | TD-12 | API budget of ₹0, with no billing | Decided by project owner |
 
@@ -31,9 +31,9 @@ Use Supabase. Every organisation-owned table is protected by row-level security.
 
 ## TD-03: Retrieval without pgvector
 
-Select rules by type and channel. Send the whole fact ledger while it is small, and use Postgres full-text search to narrow it as it grows.
+Select rules by type, and send the whole fact ledger while it is small. Channel selection and Postgres full-text search are not built, so there is no retrieval step yet. Full-text search is the planned way to narrow facts as the ledger grows.
 
-A demo rulebook does not justify an embedding pipeline. Slide 11 named pgvector, so this change must appear in the Round 2 submission.
+A demo rulebook does not justify an embedding pipeline. Slide 11 named pgvector, so this change appears in the Round 2 submission.
 
 ## TD-04: AI provider
 
@@ -139,18 +139,18 @@ The analysis engine owns the prompt, Zod schema, verification and persistence. A
 interface AnalysisProvider {
   readonly name: string;
   readonly model: string;
-  analyze(request: AnalysisRequest): Promise<unknown>;
+  analyze(request: AnalysisRequest): Promise<string>;
 }
 ```
 
-Planned layout:
+Layout:
 
 ```text
-src/lib/analysis/engine.ts       orchestrates a check run
+src/lib/analysis/run.ts          orchestrates a check run
 src/lib/analysis/deterministic/  rule-based checks, no AI imports
-src/lib/analysis/schema.ts       Zod schema for AI output
-src/lib/analysis/verify.ts       quote, rule and fact verification
-src/lib/ai/provider.ts           interface, typed errors, AI_PROVIDER selection
+src/lib/analysis/ai.ts           prompt, Zod schema, and quote, rule and fact verification
+src/lib/ai/provider.ts           interface, typed errors and the single retry
+src/lib/ai/select.ts             AI_PROVIDER selection
 src/lib/ai/gemini.ts             only file that imports @google/genai
 ```
 
@@ -158,7 +158,7 @@ Adding a provider means adding one adapter and one selection entry. No other ada
 
 Secrets:
 - `GEMINI_API_KEY` is read only on the server, from `.env.local` locally and from Vercel environment settings when deployed.
-- AI modules use the `server-only` package, so importing them into browser code fails the build.
+- The modules that read the key or call Gemini use the `server-only` package, so importing them into browser code fails the build.
 - `.env*` is ignored by git, except `.env.example`.
 - It never uses a `NEXT_PUBLIC_` prefix.
 - Keys never appear in source code, API responses, logs or commits.
@@ -167,13 +167,13 @@ Secrets:
 
 ## TD-08: Deterministic checks
 
-Terminology, banned phrases, readability, alt text, contrast and palette checks run first, in code. They must pass their tests with no AI key configured. A lint rule or test blocks AI imports in `deterministic/`.
+Terminology, banned phrases, readability, alt text, contrast and palette checks run first, in code. They pass their tests with no AI key configured. `deterministic/` has no AI imports, but no lint rule or test enforces that yet.
 
 ## TD-09: Failure handling
 
-Deterministic findings are saved before the AI step starts.
+Code and AI findings are saved together when a check finishes, so a provider failure keeps the code findings. This differs from the original plan to save code findings first: an unexpected crash during the AI step loses that run, although the document stays saved and can be rechecked.
 
-This is the specification for the Gemini adapter, which is not built yet. The adapter maps errors from the numeric HTTP `status`, never from the error class or message text. Live testing returned `InternalServerError` from Interactions and `ApiError` from `generateContent` for the same 503. A provider code only refines a 429 or 400 when it is present.
+The adapter maps errors from the numeric HTTP `status`, never from the error class or message text. Live testing returned `InternalServerError` from Interactions and `ApiError` from `generateContent` for the same 503. A provider code only refines a 429 or 400 when it is present.
 
 The application allows at most one retry per check. The retry must fit inside `AI_TIMEOUT_MS`, and quota reset times are never calculated or displayed.
 
@@ -193,9 +193,10 @@ The application allows at most one retry per check. The retry must fit inside `A
 | Other 400, 404 | No | `partial` | `provider_request` |
 | Blocked output | No | `partial` | `provider_blocked` |
 | Incomplete, invalid JSON or Zod failure | No | `partial` | `invalid_output` |
-| Missing key, or synthetic-data confirmation absent | Not attempted | `partial` | `ai_not_run` |
+| Synthetic-data confirmation absent | Not attempted | `partial` | `ai_not_confirmed` |
+| Missing key or disabled provider | Not attempted | `partial` | `ai_not_configured` |
 
-A deterministic check failure marks the run `failed`.
+If a check cannot finish, no run is saved. The document stays saved, and the page says the check failed.
 
 A `partial` run must show "AI checks skipped" with the reason. It must never display "no issues found". The Reviewer sees the same notice, and the Creator can rerun the check later.
 
@@ -221,15 +222,15 @@ Every AI result passes these steps in order:
 6. Set the claim label in code, from the model's relation and the fact's expiry date.
 7. Save the findings that pass, recording the rule version.
 
-Findings that fail steps 3 to 5 are dropped, counted in `dropped_count`, and logged by reason without the draft text. Draft content is treated as data, so instructions inside a draft have no authority.
+Findings that fail steps 3 to 5 are dropped and counted in `dropped_count`. Draft content is treated as data, so instructions inside a draft have no authority.
 
 ## TD-11: Free-tier data boundary
 
 Only fictional or synthetic content may reach Gemini.
 
-- Seed data uses Zentra, a fictional brand. Golden documents are synthetic.
+- Seed data uses Vornelle, a fictional brand. Golden documents are synthetic.
 - The submission form states the rule and requires the user to confirm the content is fictional or synthetic.
-- The server enforces this. Without confirmation, deterministic checks run, Gemini is not called, and the run is `partial` with `ai_not_run`.
+- The server enforces this. Without confirmation, deterministic checks run, Gemini is not called, and the run is `partial` with `ai_not_confirmed`.
 - The confirmation is stored on the document version with the user and time.
 - User testers receive synthetic sample documents and must not use their own.
 - `/trust` and the README disclose Gemini, the free tier, Google's data use and possible human review.
@@ -252,7 +253,7 @@ Limits vary by model, can change, and are shown at <https://aistudio.google.com/
 - Quota numbers and reset times are not hardcoded. The app reacts to provider errors instead of predicting when quota returns.
 - The UI says AI checks can be rerun later, and it does not show a reset time.
 - The golden-set runner is throttled and resumable.
-- Each report records the model, date and number of documents scored. Incomplete runs are labelled incomplete.
+- Saved responses record the model. Reports record the pinned date and any missing responses.
 - Avoid evaluation runs immediately before a demo.
 
 ## Known dependency alerts
@@ -274,7 +275,8 @@ Recorded on 2026-11-04.
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Identifies the app to Supabase. Access is limited by row-level security | Yes, by design | `.env.local`, Vercel |
 | `SUPABASE_SERVICE_ROLE_KEY` | Admin access that bypasses row-level security. Used only by local seed and test scripts | Never | `.env.local` only |
 | `SUPABASE_DB_PASSWORD` | Direct database access for migrations | Never | `.env.local` only |
-| `DEMO_USER_PASSWORD` | Shared password for the fictional Zentra accounts, generated by `npm run db:seed` and used by tests | Never | `.env.local` only |
+| `DEMO_USER_PASSWORD` | Shared password for the fictional Vornelle accounts, set by hand and used by the seed and tests | Never | `.env.local` only |
+| `CHECK_WRITER_SECRET` | Lets the server save check results. Only its hash is stored in the database | Never | `.env.local`, Vercel |
 
 The running app does not read the service role key or database password. If a later feature needs admin access, that needs a recorded decision first.
 
@@ -299,7 +301,7 @@ Access is enforced in the database by row-level security, column grants and trig
 | Write or alter audit log | No | No | No | No |
 
 - Adding and removing members has no client path yet, because invites are postponed.
-- Audit entries have no client write path, so they cannot be forged. Database triggers will write them when audited actions exist.
+- Audit entries have no client write path, so they cannot be forged. Database triggers write them.
 - `audit_log` is append-only, even for service-role connections.
 - `npm run test:rls` proves this against the hosted project, using temporary users deleted after each run.
 - Each run adds 2 permanent audit rows to the fictional test organisations, because audit rows cannot be deleted.
@@ -313,6 +315,7 @@ Access is enforced in the database by row-level security, column grants and trig
 - Approving, retiring, restoring and editing apply only to the version and status the Admin was viewing. If either changed, nothing is applied and the Admin is told. Colours bind to status only, because their content cannot change. This binding is in the server actions, so a direct API call by an Admin is not covered.
 - A retired rule cannot be edited or approved until it is restored to draft. The database enforces this.
 - Seeded rules are approved by the seed script signing in as the Demo Admin, so the approver and audit entry are real.
+- The seed runs once. It refuses if a Vornelle organisation or any demo account exists, so it can never overwrite accounts, roles or brand data. A failed run reports its stages and created IDs and is not rolled back. Recovery is manual, and is described in `seed-recovery.md`.
 - Rules are retired, not deleted, so past findings can always cite them. Creators cannot read retired rules or old versions, so findings must store their own copy of the cited rule. This is required before findings ship.
 - While an edited rule waits for re-approval, it is not approved, so it will not be applied by the check engine.
 - Rule pages stream, so a hidden or missing rule shows the not-found page with HTTP 200. Row-level security keeps its content out of the response. Tests check the content rather than the status code.
@@ -368,6 +371,7 @@ Access is enforced in the database by row-level security, column grants and trig
 ## Accuracy measurement
 
 - The golden set in `tests/golden` has 18 fictional documents and 28 labelled problems: 12 documents for development and 6 held out for measurement. Labels were written before any model run.
+- The golden documents and saved responses keep the demo brand's earlier name, Zentra, because changing the text would invalidate the measured results. The runner uses that name for its rules and facts too.
 - A finding is correct when it names the labelled rule and overlaps the labelled words. Some borderline findings are listed as allowed and count neither way.
 - `npm run eval:golden` rescores saved responses with no AI calls. `GOLDEN_CALLS=1` fetches missing responses, one request each with no retry.
 - Baseline, 3 runs on `gemini-3.1-flash-lite`, held-out documents: precision 87.5%, recall 87.5%, F1 87.5%. Expired offers were missed 6 of 6 times across both splits.
@@ -405,7 +409,7 @@ Access is enforced in the database by row-level security, column grants and trig
 
 ## Health endpoint
 
-- `GET /api/health` is public and returns only `ok` or `unavailable`, with HTTP 200 or 503. It is never cached.
+- `GET /api/health` is public and returns only an overall status and database status, with HTTP 200 or 503. It is never cached.
 - It calls `public.health_check()`, which reads no tables, using the publishable key.
 - It skips the proxy, so it does not depend on sessions.
 
@@ -421,17 +425,17 @@ Access is enforced in the database by row-level security, column grants and trig
 
 ## Interface
 
-- Visual language: a blue-pencil margin, cool paper and highlighter yellow, taken from editors marking up copy. Highlighter marks the current page and will mark flagged text in drafts.
+- Visual language: a blue-pencil margin, cool paper and highlighter yellow, taken from editors marking up copy. Highlighter marks the current page and flagged text in drafts.
 - Navigation shows only pages that work. Features appear when they are built.
 - The AI and data page states the current flow: Vercel Mumbai, processing in the United States (`iad1`), data in Singapore. Update it if the Function Region changes.
 - Fonts are self-hosted at build time, so visitors make no requests to Google.
-- Automated axe checks run on every page. They do not replace manual accessibility testing.
+- Automated axe checks run on the main pages covered by the browser tests, not every page state. They do not replace manual accessibility testing.
 - Pages show a loading message while slow data streams in. It does not appear until the server starts responding, because the shared layout reads the session.
 - The error page's retry refetches from the server, so it recovers once a service returns.
 
 ## Schema changes from the plan
 
-- `check_runs`: add `provider` and `failure_reason`. `status` is `running`, `complete`, `partial` or `failed`.
+- `check_runs`: add `provider` and `failure_reason`. `status` allows `complete`, `partial` or `failed`. The app currently records only `complete` and `partial`.
 - `document_versions`: add `synthetic_confirmed_by` and `synthetic_confirmed_at`.
 
 ## Sources

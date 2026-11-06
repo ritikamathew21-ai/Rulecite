@@ -31,9 +31,11 @@ const reportFile = `${folder}/${LABEL}${VIEW ? `.${VIEW}` : ""}.md`;
 const note = (line: string) => appendFileSync(`${folder}/${LABEL}.log`, `${new Date().toISOString()} ${line}\n`);
 const labelsHash = createHash("sha256").update(readFileSync("tests/golden/documents.ts", "utf8").replace(/\r\n/g, "\n")).digest("hex").slice(0, 12);
 
+// The golden set was measured under the demo brand's earlier name, so its rules and facts keep that name.
+const measuredBrand = <T,>(rows: T[]): T[] => JSON.parse(JSON.stringify(rows).replaceAll("Vornelle", "Zentra"));
 const approved = <T extends { status: string }>(rows: T[]) => rows.filter(({ status }) => status === "approved");
-const rules = approved(DEMO_RULES).map((rule) => ({ ...rule, id: rule.code, version: 1 })) as unknown as ApprovedRule[];
-const facts = approved(DEMO_FACTS).map((fact) => ({ ...fact, id: fact.code })) as ApprovedFact[];
+const rules = measuredBrand(approved(DEMO_RULES)).map((rule) => ({ ...rule, id: rule.code, version: 1 })) as unknown as ApprovedRule[];
+const facts = measuredBrand(approved(DEMO_FACTS)).map((fact) => ({ ...fact, id: fact.code })) as ApprovedFact[];
 const palette = approved(DEMO_ASSETS).map(({ value }) => value);
 const usableRules = aiRules(rules);
 const usableFacts = aiFacts(facts, TODAY);

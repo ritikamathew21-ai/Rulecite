@@ -4,7 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 import { DEMO_ORG_NAME, DEMO_USERS } from "../../scripts/seed-demo.mjs";
 
 const password = process.env.DEMO_USER_PASSWORD!;
-const creator = "zentra-creator@example.com";
+const creator = "vornelle-creator@example.com";
 let clickedAt = 0;
 
 async function signIn(page: Page, email: string, secret = password) {

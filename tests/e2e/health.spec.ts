@@ -9,7 +9,7 @@ test("the health check is public and reveals only its status", async ({ request 
 
 test("the health check also works for signed-in users", async ({ page }) => {
   await page.goto("/login");
-  await page.getByLabel("Email").fill("zentra-creator@example.com");
+  await page.getByLabel("Email").fill("vornelle-creator@example.com");
   await page.getByLabel("Password").fill(process.env.DEMO_USER_PASSWORD!);
   await page.getByRole("button", { name: "Sign in" }).click();
   await page.waitForURL(/\/workspace$/);
