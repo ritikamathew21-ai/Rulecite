@@ -27,6 +27,45 @@ const expectNoAccessibilityIssues = async (page: Page) => {
   expect(violations.map(({ id, nodes }) => `${id}: ${nodes.length}`)).toEqual([]);
 };
 
+test.describe("first-time guidance in the demo", () => {
+  for (const [role, step] of [
+    ["creator", "Use sample document"],
+    ["reviewer", "Open the Review queue"],
+    ["admin", "Add or edit a rule"],
+  ] as const) {
+    test(`the workspace tells the ${role} where to start`, async ({ page }) => {
+      await signIn(page, accounts[role]);
+      await expect(page.getByRole("heading", { name: "Start here" })).toBeVisible();
+      await expect(page.getByRole("listitem").filter({ hasText: step })).toBeVisible();
+    });
+  }
+
+  test("the sample button fills the form and confirms it is fictional, without saving", async ({ page }) => {
+    await signIn(page, accounts.creator);
+    await page.goto("/documents/new");
+    await page.getByRole("button", { name: "Use sample document" }).click();
+
+    await expect(page.getByLabel("Title")).toHaveValue("Vornelle launch email (sample)");
+    await expect(page.getByLabel("Paste your text")).toHaveValue(/lowest fees/);
+    await expect(page.getByRole("checkbox")).toBeChecked();
+    await expect(page).toHaveURL(/\/documents\/new$/);
+    await expectNoAccessibilityIssues(page);
+  });
+
+  test("choosing a file fills an empty title, and keeps a typed one", async ({ page }) => {
+    await signIn(page, accounts.creator);
+    await page.goto("/documents/new");
+    const file = { name: "spring-launch_email.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-") };
+
+    await page.getByLabel("Or upload a file").setInputFiles(file);
+    await expect(page.getByLabel("Title")).toHaveValue("spring launch email");
+
+    await page.getByLabel("Title").fill("My title");
+    await page.getByLabel("Or upload a file").setInputFiles({ ...file, name: "other.pdf" });
+    await expect(page.getByLabel("Title")).toHaveValue("My title");
+  });
+});
+
 test("the session token is hidden from page scripts", async ({ page, context }) => {
   await signIn(page, accounts.creator);
   const cookie = (await context.cookies()).find(({ name }) => name.includes("auth-token"));

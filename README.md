@@ -92,8 +92,8 @@ Set `AI_PROVIDER=disabled` to run without Gemini. Code checks still work.
 
 | Command | What it covers | Last result |
 |---|---|---|
-| `npm test` | Unit tests, with no AI calls | 303 of 303 on 2026-11-06 |
-| `npm run test:e2e` | Browser journeys and axe checks on a production build, with AI disabled. Run `npm run build` first | 56 of 56 on 2026-11-06 |
+| `npm test` | Unit tests, with no AI calls | 310 of 310 on 2026-11-06 |
+| `npm run test:e2e` | Browser journeys and axe checks on a production build, with AI disabled. Run `npm run build` first | 62 of 62 on 2026-11-06 |
 | `npm run test:rls` | Access rules and demo data on the hosted database. Each run adds permanent audit rows to fictional test organisations | 115 of 115 on 2026-11-05, before the demo brand was renamed |
 | `npm run eval:golden` | Rescores saved AI responses, with no AI calls | Reports in `tests/golden/results` |
 

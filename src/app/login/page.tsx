@@ -17,6 +17,10 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
         <div className="w-full max-w-sm">
           <h1 className="mb-6 text-3xl font-bold">Sign in to Rulecite</h1>
           <LoginForm next={typeof next === "string" ? next : undefined} />
+          <p className="mt-6">
+            Judging this project? The demo sign-in details are on the first page of the project PDF in the Round 2
+            submission.
+          </p>
         </div>
       </main>
     </div>

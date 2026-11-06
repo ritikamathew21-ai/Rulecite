@@ -31,6 +31,14 @@ test("signed-out visitors are sent to sign-in, keeping their destination", async
   await expect(page.getByRole("heading", { name: "Sign in to Rulecite" })).toBeVisible();
 });
 
+test("the sign-in page tells judges where to find the demo details, and shows no credentials", async ({ page }) => {
+  await page.goto("/login");
+  await expect(page.getByText("first page of the project PDF")).toBeVisible();
+  const text = await page.locator("body").innerText();
+  expect(text).not.toContain(password);
+  expect(text).not.toContain("@example.com");
+});
+
 test("the home page sends signed-out visitors to sign-in", async ({ page }) => {
   await page.goto("/");
   await expect(page).toHaveURL(/\/login$/);
